@@ -38,6 +38,7 @@
  * names over pthreads and mmap, so the call sites below are written once. */
 #include "settings/settings.h"
 #include "unlock_trainer.h"
+#include "save_art.h"
 #include "win32_compat.h"
 
 #include <stdint.h>
@@ -368,6 +369,7 @@ static void harness_guest_caller(uint32_t opd, uint64_t a0, uint64_t a1,
                                  uint64_t a5, uint64_t a6, uint64_t a7)
 {
     ppu_guest_call(opd, a0, a1, a2, a3, a4, a5, a6, a7);
+    pain_save_art::supply_missing(opd, static_cast<uint32_t>(a0), static_cast<uint32_t>(a2));
 }
 
 /* ---------------------------------------------------------------------------
@@ -462,6 +464,7 @@ int main(int argc, char** argv)
       cellGame_init_from_paramsfo(sfo_path); }
 
     ppu_recomp_register();   /* lifted function table -> address map */
+    pain_save_art::load(ppu_vfs_root);
     install_unlock_trainer();
     pain_settings::install_native_hooks();
     ps3_load_prx_modules();  /* this game's lifted system PRX, if it has any */
