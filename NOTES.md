@@ -274,11 +274,24 @@ real prologue at +0x10) and registered by fingerprint in `spu/pm_reg.c`
 
 ## Status
 
-## Published
+## Beast (Linux, GTX 1080 Ti, Vulkan): running headless
 
+The port runs on beast too, with the title's own guest shaders, via the
+sudo-free Vulkan bring-up in `scripts/beast_build.sh` (SDL2 2.32.10, Vulkan
+Headers+Loader 1.4.309 and glslang 16.3.0 built into `~/pain-ps3/prefix`;
+`push_beast.sh` stages the trees, 23 s transfer, 5 m 11 s build on 20 cores,
+cache extraction byte-exact). Headless run env: `VK_ICD_FILENAMES=nvidia_icd.json`,
+`PS3RECOMP_VK_GUEST_PROGRAMS=1`, `PS3RECOMP_VK_DUMP` + `_EVERY=120` for frame
+readback. Evidence: `Activating SKU EP9000-BCES00548_00`, gate passed, six
+shader pipelines ok / zero failures, ~33% SM utilisation on the 1080 Ti, and
+a 1280x720 frame read back showing the same PSN terms screen as the Metal
+path (independently vision-verified). Beast's copy of these notes and the run
+logs live in `beast:~/pain-ps3/`. This run doubles as the desktop-Vulkan
+reference the PS5 Phase C plan calls for.
+
+## Published
 - https://github.com/stripeyhorse/pain-recomp — this port (clean single-root
   history; no game code, data, captures or carved binaries are tracked or
-  pushed; the local screenshots/ and spu-jobmods/ stay untracked on purpose).
 - https://github.com/stripeyhorse/ps3recomp — fork of sp00nznet/ps3recomp
   carrying the 5-commit upstream series (lifter TOC save, GCC musttail,
   POSIX diagnostics, template PARAM.SFO init, guide recipes); PR-ready.
