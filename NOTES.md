@@ -1,5 +1,44 @@
 # Pain (PS3, BCES00548) — native port log
 
+## Profile saves, Online and deployment
+
+The BCES00548 save-art preparation skips its archive reads when its input
+archive handle is zero. The game nevertheless asks its SaveData callback
+to write ICON0 and PIC1 using the uninitialised artwork fields. In the
+baseline, cellSaveData received zero lengths and a null buffer on the
+first file operation, before it could write SYS-DATA. The port supplies
+the corresponding loose artwork from the owned disc for those empty
+requests. It uses the standard native SaveData write sequence.
+
+The main menu registers `OnlinePlayAvailable` at the call site
+`0x143B3C`, bound to `0x150CE0`. It checks a runtime menu byte and calls
+`0x150C78`, which checks the network object's status byte and state.
+`OnlineSelected` at `0x150D34` calls the same predicate before returning
+a transition. The default offline boot logs a failed cellNetCtl state
+query and the game's network-error dialog. The trainer retains the
+network gate. Even with a psnr server, PAIN's Medius service path needs
+its own compatible endpoint and end-to-end validation.
+
+The workstation prepares the decrypted executable, HDD cache, full
+LevelScript catalogue, HLE table and wrapped PPU sources.
+The target scripts compile and launch the copied inputs.
+See [README.md](README.md) for the workstation and target commands.
+
+## Renderer verification (bobby): settings PASS, silhouette survives
+
+Sync Rate FULL PASS: Down lands on the row (highlighted frame), Cross 30->20,
+Metal surface cadence 26.07 -> 18.02 presents/s, and the SAVED 20 beats a 60 FPS
+launch override. Display: the 1440p preset enlarged the drawable to 1920x958;
+4K window preset hit the same desktop limit; Fullscreen On persisted but
+relaunches stayed windowed while the console was locked (re-test unlocked).
+Image Quality: Metal APPLIED vsync-off, SMAA, vibrance 0.25 and a 1920x1080
+post-process surface; the scale label renders the percent sign incorrectly
+(glyph bug, queued). Boot + FreePlay PASS on the rebuilt runtime. **The
+silhouette persists**: textured in the sling, flat grey at release, grey
+patches at landing -- the stencil fix was not the cause. The release boundary
+isolates the ragdoll/airborne program pair; round 2 diffs those programs and
+their draw state.
+
 ## Renderer + native Video settings (local, pending bobby verification)
 
 PAIN 61048ef: added menu rows now register in the game's LIVE navigation and
@@ -21,8 +60,7 @@ slingshot with the score HUD, the FreePlay LevelScript linking 19 imports,
 starting (result=0), DLLInit/DLLReset. Trainer v2 wrote T_TUTORIAL=1 after
 AutoLoad: Single Player / Multiplayer / Trophy Room lost their padlocks and
 Single Player became enterable; stock relaunch restored all four locks and
-blocked entry (reversible). **Online kept its padlock** -- gated on something
-other than the tutorial flag (likely network state; queued for the QA pass).
+blocked entry (reversible). **Online kept its padlock.** The network predicate is traced above.
 **Sync Rate partial**: the row renders in Extras/pause Audio, but menu
 NAVIGATION skips it (Down wraps Volume -> Dialog) and Cross never dispatches
 it -- the row was drawn without registration in the item list/count and
@@ -50,22 +88,12 @@ DLLInit/DLLReset run, and the previous 0x002330AC spin/abort is gone. The
 LevelScript pipeline (90 unique PRXs, lift + serve-by-path + LevelScriptExport
 binding + three toolkit fixes carried as port patches) is committed through
 `99da9b6`. Known polish, not blockers: some Jarvis poses show rendering
-defects; full collision fidelity and course completion are unverified; the
-native profile save has an ICON0 write failure (cellSaveData icon path).
+defects; full collision fidelity and course completion are unverified; this run predates the profile save-art fix.
 
 Target: **Pain** (Idol Minds / SCEE, 2007–2010, disc release **BCES00548**, game version **01.00**, SDK-era ~2.60).
 Approach: static recompilation with [ps3recomp](https://github.com/sp00nznet/ps3recomp) — same method as
 [inFAMOUSreborn](https://github.com/whompay/inFAMOUSreborn). Platforms: **macOS (Apple Silicon, Metal)** first,
 PS5 later. This repo contains no game data; everything generated is rebuilt from the owner's own dump.
-
-## Machine fleet
-
-| Machine | Role | Notes |
-|---|---|---|
-| `debian` (local) | analysis, lifting, builds | 12 cores, GCC 14.2, Python 3.15, null backend |
-| `beast` (ssh `beast`, 192.168.1.54) | heavy builds, RPCS3 reference, Vulkan backend | Debian 13, 20 cores, 31 GB, GTX 1080 Ti (driver 550) |
-| `bobby` (ssh `bobby`, 192.168.1.117) | final target platform | Apple Silicon Mac (Metal backend, arm64) |
-| `unraid` (ssh `unraid`, root@192.168.1.10) | game source | `Pain_BCES00548.zip` in `/mnt/user/ROMS/` |
 
 ## Ground truth: the decrypted ELF
 
@@ -177,7 +205,7 @@ stack roulette that 313 ctors won and #314 lost.
 
 **Fix:** `ppu_lifter.py` now emits `vm_write64(ctx->gpr[1]+0x28, ctx->gpr[2])`
 before every direct `bl` call — exactly the glink save (patch in
-`patches/ps3recomp-local.patch`, applied to the vendored toolkit).
+[the toolkit series](patches/upstream/README.md), patch 1).
 
 Also observed, not yet fixed: one indirect call through a game import-table slot
 landed on an HLE-inject OPD (`0x20000028`, opd[0]=0) and was dropped by the
@@ -379,9 +407,7 @@ Pain's own **Sync Rate** menu control is wired to a LIVE frame cap (the local nu
 boot reached Extras → Audio through guest pad input; save/reload/rollback verified).
 Other gfx options apply at startup via the INI (window size/aspect/display-sync
 controls added to the RSX layer in the toolkit). The full retail graphics menu is
-unfinished; the native menu tables + dispatch addresses are mapped in the
-implementation report (Obsidian). Known issue: the game's profile save fails on an
-ICON0 write (cellSaveData icon path) — first target for the next pass.
+unfinished in this historical build. The current Video/Display page is described above.
 
 **Trainer v2 (66bb4e1)**: PAIN_UNLOCK_ALL now WRITES T_TUTORIAL=1 into the live
 profile after AutoLoad — icons, entries and every other reader agree on
@@ -392,7 +418,7 @@ cap, saves immediately; persistence and write-failure rollback verified by the
 callback probe). **LevelScripts ship in both standard deploy paths** (90 modules
 / 91 disc paths validated locally, including Downtown FreePlay). Rendered
 padlocks, the on-screen Sync Rate row and playable FreePlay await the next
-bobby run. The fresh-profile autosave still hits the zero-length ICON0 failure.
+bobby run at the time of this milestone.
 
 **LevelScript PRX pipeline**: 90 unique level PRXs lifted and served by disc path
 (commit `ad1324b`), including a toolkit fix for PRX REL64 relocation and dynamic
@@ -401,12 +427,8 @@ bobby verification drive into the tutorial.
 
 ## Published
 
-- https://github.com/stripeyhorse/pain-recomp — this port (clean single-root
-  history; no game code, data, captures or carved binaries are tracked or
-- https://github.com/stripeyhorse/ps3recomp — fork of sp00nznet/ps3recomp
-  carrying the 5-commit upstream series (lifter TOC save, GCC musttail,
-  POSIX diagnostics, template PARAM.SFO init, guide recipes); PR-ready.
-- Raw-dump pipeline: scripts/prepare.sh decrypts the retail EBOOT.BIN via
-  rpcs3 when no EBOOT.elf exists and rebuilds the HDD cache from the raw
-  CacheDesc.dat + CacheData.pak when the completion marker is absent;
-  both launchers call it first.
+The public port provides this log, the preparation scripts and the full
+toolkit series. [PainRecomp](https://github.com/stripeyhorse/pain-recomp)
+
+The toolkit fork's master includes all 12 patches listed in the cover
+table. [ps3recomp fork](https://github.com/stripeyhorse/ps3recomp) · [Patch series](patches/upstream/README.md)
