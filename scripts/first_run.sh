@@ -1,14 +1,12 @@
 #!/bin/bash
-# First-run harness on this box (null backend, headless): boot the recompiled
-# Pain with a timeout, capture the log for bring-up triage.
-# Usage: scripts/first_run.sh [seconds]
-set -u
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
-"$HERE/scripts/prepare.sh" || exit 1
-ELF="$ROOT/game/Pain_BCES00548/Pain BCES00548/PS3_GAME/USRDIR/EBOOT.elf"
-export PS3_HDD0_ROOT="$ROOT/hdd0"
-T="${1:-60}"
-cd "$HERE"
-timeout "$T" ./build/PainRecomp "$ELF" 2>&1 | tee "$HERE/run.log"
-echo "--- exit: $? (124 = still running at timeout)"
+# Local headless run with a bounded process lifetime. A timeout means the game
+# was still running. The caller can distinguish that from an early exit.
+set -euo pipefail
+here="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$here/.." && pwd)"
+source "$here/scripts/levelscript_deploy.sh"
+set_deploy_paths "$root"
+GAME_DIR="$deploy_game" HDD0_ROOT="$deploy_hdd" "$here/scripts/prepare.sh"
+export PS3_HDD0_ROOT="$deploy_hdd"
+cd "$here"
+timeout "${1:-60}" "${PAIN_BINARY:-./build/PainRecomp}" "$deploy_game/USRDIR/EBOOT.elf" 2>&1 | tee "$here/run.log"

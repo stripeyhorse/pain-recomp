@@ -1,64 +1,75 @@
 #!/bin/bash
-# prepare.sh -- make a RAW game dump runnable. Idempotent; run before launching.
-# Works from the raw retail files: the encrypted EBOOT.BIN and the disc's
-# CacheDesc.dat + CacheData.pak. No pre-processed artifacts are required.
-#
-# Env overrides:
-#   GAME_DIR   path to the dump's PS3_GAME (default: derived, ../game/.../PS3_GAME)
-#   HDD0_ROOT  writable cache root (default: <workspace>/hdd0)
-#   RPCS3_BIN  path to an rpcs3 binary/AppImage used only for EBOOT decryption
-set -u
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
-
-GAME_DIR="${GAME_DIR:-}"
-if [ -z "$GAME_DIR" ]; then
-    U="$(find "$ROOT/game" -maxdepth 4 -type d -name USRDIR 2>/dev/null | head -1)"
-    [ -n "$U" ] && GAME_DIR="$(dirname "$U")"
+# Prepare an owned raw disc dump. Retail EBOOT.BIN and the two cache files
+# are sufficient. This prepares data only. See prepare_deploy.sh for lifts.
+set -euo pipefail
+here="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$here/.." && pwd)"
+game_dir="${GAME_DIR:-}"
+if [[ -z "$game_dir" ]]; then
+    for candidate in "$root/game/Pain_BCES00548/Pain BCES00548/PS3_GAME" "$root/game/PS3_GAME"; do
+        if [[ -d "$candidate/USRDIR" ]]; then
+            game_dir="$candidate"
+            break
+        fi
+    done
 fi
-HDD0_ROOT="${HDD0_ROOT:-$ROOT/hdd0}"
-USRDIR="$GAME_DIR/USRDIR"
-TITLE_ID="BCES00548"
+hdd_root="${HDD0_ROOT:-$root/hdd0}"
+usrdir="$game_dir/USRDIR"
+elf="$usrdir/EBOOT.elf"
+[[ -n "$game_dir" && -d "$usrdir" ]] || {
+    echo "No disc USRDIR found. Set GAME_DIR to the dump's PS3_GAME directory." >&2
+    exit 1
+}
 
-[ -d "$USRDIR" ] || { echo "FATAL: no game USRDIR at $USRDIR"; exit 1; }
+is_elf() {
+    [[ -s "$1" && "$(od -An -tx1 -N4 "$1" | tr -d '[:space:]')" == 7f454c46 ]]
+}
 
-# --- 1. the executable: raw EBOOT.BIN -> EBOOT.elf ---------------------------
-if [ ! -f "$USRDIR/EBOOT.elf" ]; then
-    if [ ! -f "$USRDIR/EBOOT.BIN" ]; then
-        echo "FATAL: neither EBOOT.elf nor EBOOT.BIN in $USRDIR"
+if ! is_elf "$elf"; then
+    [[ -s "$usrdir/EBOOT.BIN" ]] || {
+        echo "No valid EBOOT.elf or raw EBOOT.BIN in $usrdir" >&2
         exit 1
+    }
+    rpcs3="${RPCS3_BIN:-}"
+    if [[ -z "$rpcs3" ]]; then
+        rpcs3="$(command -v rpcs3 || true)"
     fi
-    RPCS3="${RPCS3_BIN:-}"
-    if [ -z "$RPCS3" ]; then
-        for c in /tmp/opencode/squashfs-root/AppRun /tmp/opencode/rpcs3.AppImage \
-                 "$HOME/Applications/rpcs3.app/Contents/MacOS/rpcs3" \
-                 /Applications/rpcs3.app/Contents/MacOS/rpcs3; do
-            [ -x "$c" ] && RPCS3="$c" && break
+    if [[ -z "$rpcs3" ]]; then
+        for candidate in "$HOME/Applications/rpcs3.app/Contents/MacOS/rpcs3" \
+                         /Applications/rpcs3.app/Contents/MacOS/rpcs3; do
+            if [[ -x "$candidate" ]]; then
+                rpcs3="$candidate"
+                break
+            fi
         done
     fi
-    if [ -n "$RPCS3" ]; then
-        echo "== decrypting EBOOT.BIN with $RPCS3 (writes EBOOT.elf beside it)"
-        QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}" "$RPCS3" --decrypt "$USRDIR/EBOOT.BIN" || exit 1
-    else
-        echo "FATAL: raw EBOOT.BIN present but no EBOOT.elf and no rpcs3 found."
-        echo "  Decrypt your own dump once (rpcs3 --decrypt <EBOOT.BIN>) and rerun,"
-        echo "  or point RPCS3_BIN at an rpcs3 binary/AppImage."
+    if [[ -z "$rpcs3" ]] || ! command -v "$rpcs3" >/dev/null 2>&1; then
+        printf 'Set RPCS3_BIN to an executable RPCS3 binary/AppImage, or run:\n  rpcs3 --decrypt "%s"\nThen run prepare.sh again.\n' "$usrdir/EBOOT.BIN" >&2
         exit 1
     fi
+    scratch="$(mktemp -d "$usrdir/.decrypt.XXXXXX")"
+    trap 'rm -rf "$scratch"' EXIT
+    # RPCS3 writes beside its input. Publish the result only after checking it.
+    cp "$usrdir/EBOOT.BIN" "$scratch/EBOOT.BIN"
+    echo "Decrypting EBOOT.BIN with $rpcs3"
+    QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}" \
+        APPIMAGE_EXTRACT_AND_RUN="${APPIMAGE_EXTRACT_AND_RUN:-1}" \
+        "$rpcs3" --decrypt "$scratch/EBOOT.BIN"
+    is_elf "$scratch/EBOOT.elf" || {
+        echo "RPCS3 did not produce a valid EBOOT.elf" >&2
+        exit 1
+    }
+    mv "$scratch/EBOOT.elf" "$elf"
 fi
-[ -f "$USRDIR/EBOOT.elf" ] || { echo "FATAL: decryption did not produce EBOOT.elf"; exit 1; }
 
-# --- 2. the HDD cache: raw CacheDesc.dat + CacheData.pak -> 8,044 loose files --
-MARKER="$HDD0_ROOT/game/$TITLE_ID/USRDIR/CacheFlags/CacheDone.flg"
-if [ ! -f "$MARKER" ]; then
-    echo "== pre-seeding the game-data cache from the raw pak (idempotent)"
-    python3 "$HERE/scripts/extract_cache.py" \
-        "$USRDIR/CacheDesc.dat" "$USRDIR/CacheData.pak" \
-        "$HDD0_ROOT/game/$TITLE_ID" || exit 1
+install_root="$hdd_root/game/BCES00548"
+marker="$install_root/USRDIR/CacheFlags/CacheDone.flg"
+if [[ ! -s "$marker" ]]; then
+    echo "Extracting the HDD cache from the disc"
+    "${PYTHON3:-python3}" "$here/scripts/extract_cache.py" \
+        "$usrdir/CacheDesc.dat" "$usrdir/CacheData.pak" "$install_root"
 else
-    echo "== HDD cache present ($(find "$HDD0_ROOT/game/$TITLE_ID/USRDIR" -type f | wc -l | tr -d ' ') files)"
+    echo "HDD cache present"
 fi
 
-echo "PREPARE_OK"
-echo "  EBOOT:  $USRDIR/EBOOT.elf"
-echo "  HDD0:   $HDD0_ROOT"
+printf 'PREPARE_OK\n  EBOOT:  %s\n  HDD0:   %s\n' "$elf" "$hdd_root"

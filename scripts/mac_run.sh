@@ -1,19 +1,17 @@
 #!/bin/bash
-# (Re)launch PainRecomp on bobby with the Metal backend and the pre-seeded
-# HDD cache. Runs ON bobby. Kills any previous instance first.
-# (pkill -x does not reliably match on macOS; killall -9 by name does.)
-killall -9 PainRecomp 2>/dev/null && sleep 1
-cd "$HOME/pain-ps3/pain-recomp"
-# Prepare from the raw files if needed (idempotent): decrypts EBOOT.BIN with
-# rpcs3 if EBOOT.elf is missing, and (re)builds the HDD cache from the raw
-# CacheDesc.dat + CacheData.pak when the completion marker is absent.
-GAME_DIR="$HOME/pain-ps3/game/PS3_GAME" HDD0_ROOT="$HOME/pain-ps3/hdd0" \
-    ./scripts/prepare.sh || exit 1
-export PS3_HDD0_ROOT="$HOME/pain-ps3/hdd0"
-export PS3RECOMP_METAL_FRAME_DUMP="$HOME/pain-ps3/frame.ppm"   # every 120th present
-nohup ./build/PainRecomp "$HOME/pain-ps3/game/PS3_GAME/USRDIR/EBOOT.elf" \
-      > "$HOME/pain-ps3/run_mac.log" 2>&1 &
+# (Re)launch the prepared Metal build on bobby.
+set -euo pipefail
+root="$HOME/pain-ps3"
+cd "$root/pain-recomp"
+elf="$root/game/PS3_GAME/USRDIR/EBOOT.elf"
+export PS3_HDD0_ROOT="$root/hdd0"
+if [[ ! -x ./build/PainRecomp || ! -s "$elf" ||
+      ! -s "$PS3_HDD0_ROOT/game/BCES00548/USRDIR/CacheFlags/CacheDone.flg" ]]; then
+    echo "Missing build or prepared disc/cache files. Run push_bobby.sh on the workstation and mac_build.sh on bobby." >&2
+    exit 1
+fi
+if killall PainRecomp 2>/dev/null; then
+    sleep 1
+fi
+nohup ./build/PainRecomp "$elf" > "$root/run_mac.log" 2>&1 &
 echo "launched pid $!"
-sleep 15
-grep -aE "VFS root|content root|Activating|blu-ray files|RSX metal|pipeline|captured" \
-     "$HOME/pain-ps3/run_mac.log" | head -12

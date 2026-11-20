@@ -65,8 +65,12 @@ build_deps() {
 
 build_port() {
     local port="$root/pain-recomp"
-    python3 "$port/scripts/prepare_levelscripts.py" "$root/game/PS3_GAME/USRDIR" --check-full
+    [[ -s "$port/recompiled/ppu_hle_nids.cpp" && -s "$port/prx/generated/full/catalog.inc" ]] || {
+        echo "Missing prepared build inputs. Run push_beast.sh from the workstation." >&2
+        exit 1
+    }
     cmake -S "$port" -B "$port/build" -G Ninja \
+        -DPAIN_USE_PREPARED_PPU=ON -DPORT_SPU_INPUTS= \
         -DCMAKE_PREFIX_PATH="$prefix" -DCMAKE_BUILD_TYPE=Release \
         -DPAIN_LEVELSCRIPT_DIR="$port/prx/generated/full" \
         -DPS3RECOMP_DIR="$root/ps3recomp" -DPS3RECOMP_RSX_VULKAN=ON \

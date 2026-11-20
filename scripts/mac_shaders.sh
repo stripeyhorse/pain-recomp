@@ -2,7 +2,8 @@
 # Build glslang + SPIRV-Cross (guest-shader translation deps for the Metal
 # backend) into ~/pain-ps3/prefix, then reconfigure + rebuild PainRecomp with
 # MSL translation ON. Runs ON bobby. No sudo needed.
-set -e
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$HOME/Library/Python/3.9/bin:$PATH"
 P="$HOME/pain-ps3/prefix"
 SRC="$HOME/pain-ps3/src"
@@ -25,11 +26,4 @@ cmake --build SPIRV-Cross/build -j 8 >/dev/null
 cmake --install SPIRV-Cross/build >/dev/null
 
 echo "== reconfigure + rebuild PainRecomp with the prefix"
-cd "$HOME/pain-ps3/pain-recomp"
-cmake -B build -G Ninja \
-      -DCMAKE_PREFIX_PATH="$P" \
-      -DCMAKE_MAKE_PROGRAM="$(command -v ninja || echo "$P/bin/ninja")" \
-      -DPS3RECOMP_DIR="$HOME/pain-ps3/ps3recomp" \
-      -DCMAKE_BUILD_TYPE=Release 2>&1 | grep -iE "translation|glslang|spirv|metal" || true
-cmake --build build -j 8 2>&1 | tail -1
-echo "SHADERS_DONE"
+exec "$here/mac_build.sh"
