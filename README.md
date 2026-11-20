@@ -44,6 +44,7 @@ python ps3recomp/tools/extract_spu_images.py <EBOOT.elf> --output spu-images/
 python ps3recomp/tools/ppu_lifter.py <EBOOT.elf> \
     --functions analysis/EBOOT.functions.json \
     --hle-stubs  analysis/EBOOT.imports.json \
+    --insn-patches patches/unlock-trainer.json \
     --output recompiled --jobs 12 --chunk-lines 150000
 
 # 3. SPURS policy module: carve 12,160 bytes at guest 0xB70B80 out of the
@@ -61,6 +62,15 @@ PS3_HDD0_ROOT=$PWD/../hdd0 ./build/PainRecomp <EBOOT.elf>
 
 Sha256 of the decrypted EBOOT.elf this port was brought up against:
 `411d00aa3809706376bc8fe55e309844310e37e69152bdbb15627be5833fe40b`.
+
+### Unlock trainer
+
+After lifting BCES00548 with `patches/unlock-trainer.json` and rebuilding,
+launch with `PAIN_UNLOCK_ALL=1` to bypass the Crash Course requirement and
+mark the local content catalogue available for this session. The trainer is
+off by default. Unset the variable and restart to restore the original checks.
+Use a separate `PS3_GAMEDATA_ROOT` for trainer sessions to keep campaign progress
+earned while playing separate from your normal save.
 
 ## The four boot blockers, and their fixes
 

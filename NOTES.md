@@ -309,7 +309,34 @@ the game's segments), and implement the port's `ps3_load_prx_modules()` hook
 to serve them by path and bind LevelScriptExport's ten NIDs to the active
 module's exports (the FIRMWARE_LLE.md step-4 pattern applied to game PRXs).
 
+## Native integration missions (all compile-verified locally; bobby verification queued)
+
+**Unlock trainer** (`PAIN_UNLOCK_ALL=1`, default off, fully reversible): all four
+main-menu padlocks gate on the same `T_TUTORIAL` profile flag (set by Crash Course
+completion); the DLC unlocks compare 16-byte tokens against catalogue records. The
+trainer bypasses those checks in memory via 19 guarded instruction patches
+(verified word-for-word against BCES00548) + a DLC-token shim. Unset the env and
+restart for stock behaviour. Compile-verified; padlock removal, Single Player
+entry and DLC characters pending the bobby run. (`unlock_trainer.cpp`,
+`patches/unlock-trainer.json`, research doc with the 155-name EDAT inventory in
+the Obsidian vault.)
+
+**Native settings layer**: `settings.ini` (INI > env > default) feeds the runtime;
+Pain's own **Sync Rate** menu control is wired to a LIVE frame cap (the local null
+boot reached Extras → Audio through guest pad input; save/reload/rollback verified).
+Other gfx options apply at startup via the INI (window size/aspect/display-sync
+controls added to the RSX layer in the toolkit). The full retail graphics menu is
+unfinished; the native menu tables + dispatch addresses are mapped in the
+implementation report (Obsidian). Known issue: the game's profile save fails on an
+ICON0 write (cellSaveData icon path) — first target for the next pass.
+
+**LevelScript PRX pipeline**: 90 unique level PRXs lifted and served by disc path
+(commit `ad1324b`), including a toolkit fix for PRX REL64 relocation and dynamic
+export removal (`lift_prx.py`, `prx_loader.h`). The mission is still completing its
+bobby verification drive into the tutorial.
+
 ## Published
+
 - https://github.com/stripeyhorse/pain-recomp — this port (clean single-root
   history; no game code, data, captures or carved binaries are tracked or
 - https://github.com/stripeyhorse/ps3recomp — fork of sp00nznet/ps3recomp

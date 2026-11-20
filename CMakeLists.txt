@@ -64,6 +64,29 @@ if(NOT RECOMP_SOURCES)
         "there is nothing to run.")
 endif()
 
+# PAIN switches guest stacks inside a handwritten PPU function. Keep its
+# original lift available for inspection and link a host continuation in its
+# place. Change only the definition so direct and indirect calls share it.
+set(COROUTINE_DEFINITION "void func_00011810(ppu_context* ctx) {")
+foreach(source IN LISTS RECOMP_SOURCES)
+    file(STRINGS "${source}" definition LIMIT_COUNT 1
+         REGEX "^void func_00011810\\(ppu_context\\* ctx\\) [{]$")
+    if(definition)
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+        file(READ "${source}" original)
+        string(REPLACE "${COROUTINE_DEFINITION}"
+             "static void original_func_00011810(ppu_context* ctx) {" lifted "${original}")
+        set(coroutine_lift "${CMAKE_CURRENT_BINARY_DIR}/ppu_with_host_coroutine.cpp")
+        file(GENERATE OUTPUT "${coroutine_lift}" CONTENT "${lifted}")
+        list(REMOVE_ITEM RECOMP_SOURCES "${source}")
+        list(APPEND RECOMP_SOURCES "${coroutine_lift}")
+        break()
+    endif()
+endforeach()
+if(NOT coroutine_lift)
+    message(FATAL_ERROR "The BCES00548 EBOOT lift is missing coroutine entry 0x00011810.")
+endif()
+
 list(LENGTH RECOMP_SOURCES RECOMP_SOURCE_COUNT)
 message(STATUS "Lifted sources:  ${RECOMP_SOURCE_COUNT} file(s)")
 
@@ -190,6 +213,8 @@ endif()
 add_executable(${PROJECT_NAME}
     main.cpp
     stubs.cpp
+    guest_coroutine.cpp
+    unlock_trainer.cpp
     prx/levelscript_reg.cpp
     ${LEVELSCRIPT_SOURCES}
     ${PS3RECOMP_SCAFFOLD}

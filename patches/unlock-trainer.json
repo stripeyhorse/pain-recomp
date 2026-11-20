@@ -1,0 +1,137 @@
+{
+  "patches": [
+    {
+      "addr": "0x00145F74",
+      "orig": "0x801E0010",
+      "new": "0x92FE0010",
+      "guard": "g_pain_unlock_all",
+      "note": "Boot catalogue scan: set the record state from its zero register r23"
+    },
+    {
+      "addr": "0x00145F78",
+      "orig": "0x2F800003",
+      "new": "0x2F970000",
+      "guard": "g_pain_unlock_all",
+      "note": "Boot catalogue scan: take the existing next-record branch"
+    },
+    {
+      "addr": "0x0014628C",
+      "orig": "0x38600000",
+      "new": "0x38600001",
+      "guard": "g_pain_unlock_all",
+      "note": "AwardUnlocked: return true when the award stat gate is unsatisfied"
+    },
+    {
+      "addr": "0x00148054",
+      "orig": "0x409D002C",
+      "new": "0x60000000",
+      "guard": "g_pain_unlock_all",
+      "note": "ModeUnlocked: allow an existing row past the progression stat check"
+    },
+    {
+      "addr": "0x0014CFAC",
+      "orig": "0x801E0010",
+      "new": "0x931E0010",
+      "guard": "g_pain_unlock_all",
+      "note": "Alternate catalogue scan: set the record state from its zero register r24"
+    },
+    {
+      "addr": "0x0014CFB0",
+      "orig": "0x2F800003",
+      "new": "0x2F980000",
+      "guard": "g_pain_unlock_all",
+      "note": "Alternate catalogue scan: take the existing next-record branch"
+    },
+    {
+      "addr": "0x0014ECD8",
+      "orig": "0x4805DED5",
+      "new": "0x38600000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 1: bypass the EDAT open"
+    },
+    {
+      "addr": "0x0014ED0C",
+      "orig": "0x4805DFD5",
+      "new": "0x60000000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 1: bypass the EDAT read"
+    },
+    {
+      "addr": "0x0014ED20",
+      "orig": "0x4805DB39",
+      "new": "0x60000000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 1: bypass the EDAT close"
+    },
+    {
+      "addr": "0x0014EDC8",
+      "orig": "0x484C5839",
+      "new": "0x38600000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 1: return a matching token result"
+    },
+    {
+      "addr": "0x0014EDCC",
+      "orig": "0xE8410028",
+      "new": "0x60000000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 1: retain the current TOC because no compare was called"
+    },
+    {
+      "addr": "0x0014EE48",
+      "orig": "0x4805DD65",
+      "new": "0x38600000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 2: bypass the EDAT open"
+    },
+    {
+      "addr": "0x0014EE7C",
+      "orig": "0x4805DE65",
+      "new": "0x60000000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 2: bypass the EDAT read"
+    },
+    {
+      "addr": "0x0014EE90",
+      "orig": "0x4805D9C9",
+      "new": "0x60000000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 2: bypass the EDAT close"
+    },
+    {
+      "addr": "0x0014EF38",
+      "orig": "0x484C56C9",
+      "new": "0x38600000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 2: return a matching token result"
+    },
+    {
+      "addr": "0x0014EF3C",
+      "orig": "0xE8410028",
+      "new": "0x60000000",
+      "guard": "g_pain_unlock_all",
+      "note": "Selection 2: retain the current TOC because no compare was called"
+    },
+    {
+      "addr": "0x00150A20",
+      "orig": "0x801E0010",
+      "new": "0x92FE0010",
+      "guard": "g_pain_unlock_all",
+      "note": "Refresh: set the record state from its zero register r23"
+    },
+    {
+      "addr": "0x00150A24",
+      "orig": "0x7C0007B4",
+      "new": "0x38000000",
+      "guard": "g_pain_unlock_all",
+      "note": "Refresh: skip the existing file probe for state zero"
+    },
+    {
+      "addr": "0x0015C9F4",
+      "orig": "0x2FA30000",
+      "new": "0x2F830002",
+      "guard": "g_pain_unlock_all",
+      "note": "MainMenuActive: route the first four items through the tutorial-complete continuation"
+    }
+  ]
+}
