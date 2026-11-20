@@ -29,16 +29,21 @@ PS5 later. This repo contains no game data; everything generated is rebuilt from
 - Firmware imports: **418 across 31 libraries** (369 named, 88%)
 - Biggest: cellSysutil 39, sceNp 38, cellGcmSys 36, sysPrxForUser 33
 
-### Embedded SPU images (extract_spu_images.py)
+### Embedded SPU images (extract_spu_images.py) — identified via strings
 
-| Image | Offset | Size | Guess |
+All three link `libspurs` → they are **SPURS job modules**, and the big two are **Havok**:
+
+| Image | Offset | Size | Identity |
 |---|---|---|---|
-| spu_0000 | 0x00B48980 | 2.8 KB | ? (tiny — maybe a stub/loader) |
-| spu_0001 | 0x00C24400 | 145 KB | SPURS policy module or physics job |
-| spu_0002 | 0x00C47B00 | 90.8 KB | second job module |
+| spu_0000 | 0x00B48980 | 2.8 KB | tiny Idol Minds helper task (dev path `/home/kanee/svnwork/ps3-svn/`, `.SpuGUID`) |
+| spu_0001 | 0x00C24400 | 145 KB | **`hkspurscollide_spu_gcc_release`** — Havok collision narrow-phase (TtNarrowPhase, LtBvTree3) |
+| spu_0002 | 0x00C47B00 | 90.8 KB | **`hkspursintegrate_spu_gcc_release`** — Havok integrator/solver (StIntegrate, TtIntVel/TtSolve/TtExport) |
 
-Expect more SPURS job modules streamed at runtime → collect with `SPU_DUMP_MISS=<dir>`,
-lift with `tools/lift_jobmods.py`.
+Lifted to `spu/` via `tools/build_spu_workloads.py`: 898 functions, 102 call targets,
+3 fingerprint-registered images (constructor `spu_register_all`); 42 `.word` data-in-code
+fallbacks go through the interpreter. If the game streams different copies (e.g. from
+CacheData.pak), the fingerprint misses and the interpreter catches them — collect with
+`SPU_DUMP_MISS=<dir>` and lift then.
 
 ### Module risk read (vs ps3recomp MODULE_STATUS)
 
