@@ -39,6 +39,7 @@
 #include "settings/settings.h"
 #include "unlock_trainer.h"
 #include "save_art.h"
+#include "pose_pin.h"
 #include "win32_compat.h"
 
 #include <stdint.h>
@@ -438,6 +439,7 @@ int main(int argc, char** argv)
 #endif
 
     if (!pain_settings::load()) return 1;
+    if (!install_pose_pin()) return 1;
     printf("=== ps3recomp game runner ===\n");
     printf("[settings] Sync Rate is in Audio, under Extras or the pause menu.\n");
 

@@ -81,6 +81,16 @@ cache with digest checks; three cold runs past the install gate with sustained
 vblank/flip/FIFO and the null-backend pixel result). The full hand-off
 checklist is in the Obsidian vault and docs/PS5-PORT.md.
 
+## Silhouette round 7: startup pose pin
+
+The regular port build accepts `PAIN_PIN_POSE_AT_KICK=1` or
+`pin_pose_at_kick = on` in the INI. It defaults to off. For BCES00548 01.00,
+the port keeps one 7,680-byte pose snapshot per alternating SecondSpurs
+render list, captured at its ready-count kick. The depth prepass and
+material jobs use the same completed pose. The prepass uses a pose one
+list generation behind the unpinned material pass. See the README for the
+toolkit hook requirement.
+
 ## Silhouette round 6: BROKEN IN PRACTICE — 0 pixels, two independent flights
 
 **Jarvis textured from release through street contact, twice, with 0

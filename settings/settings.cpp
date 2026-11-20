@@ -51,6 +51,7 @@ constexpr std::array options{
     Option{"vulkan_window", "PS3RECOMP_VK_WINDOW", "off", Kind::toggle},
     Option{"vulkan_guest_programs", "PS3RECOMP_VK_GUEST_PROGRAMS", "off", Kind::toggle},
     Option{"unlock_trainer", "PAIN_UNLOCK_ALL", "off", Kind::toggle},
+    Option{"pin_pose_at_kick", "PAIN_PIN_POSE_AT_KICK", "off", Kind::toggle},
 };
 
 std::mutex settings_mutex;

@@ -93,6 +93,23 @@ Use `PS3_GAMEDATA_ROOT` to keep the player profile separate from the
 installed cache. The native bootstrap may show an offline network message
 before the main menu. The first run can ask for consent before it continues.
 
+### Crash Course pose workaround
+
+Set `PAIN_PIN_POSE_AT_KICK=1` when launching PainRecomp, or set
+`pin_pose_at_kick = on` in `settings.ini`. The option is off by default and
+is read at startup. It gives the two same-list pose consumers, depth prepass
+and material, the completed pose from the list kick. The prepass uses a pose
+one list generation behind the unpinned material pass. The sling band can
+still turn grey.
+
+The option requires a toolkit with the pose-pin runtime hooks. If your
+toolkit checkout lacks `include/ps3emu/runtime_hooks.h`, apply the supplied
+[toolkit patch](patches/pose-pin-runtime-hooks.patch) before building.
+
+```sh
+git -C ../ps3recomp apply ../pain-recomp/patches/pose-pin-runtime-hooks.patch
+```
+
 ### Cross-build for PS5
 
 Use ps5-payload-sdk v0.50 with host LLVM 19 and a Prospero build of SDL2

@@ -233,6 +233,7 @@ add_executable(${PROJECT_NAME}
     guest_coroutine.cpp
     unlock_trainer.cpp
     save_art.cpp
+    pose_pin.cpp
     prx/levelscript_reg.cpp
     ${LEVELSCRIPT_SOURCES}
     ${PS3RECOMP_SCAFFOLD}
