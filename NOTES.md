@@ -91,6 +91,11 @@ material jobs use the same completed pose. The prepass uses a pose one
 list generation behind the unpinned material pass. See the README for the
 toolkit hook requirement.
 
+The regular Linux Vulkan build repeated the centred Crash Course release
+in two environment-enabled processes. Both first airborne crops had zero
+exact silhouette-colour pixels (round 5 baseline 6,670), and Jarvis stayed
+textured through street contact. The sling band can still turn grey.
+
 ## Silhouette round 6: BROKEN IN PRACTICE — 0 pixels, two independent flights
 
 **Jarvis textured from release through street contact, twice, with 0
