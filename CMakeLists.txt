@@ -223,7 +223,7 @@ if(EXISTS "${PAIN_LEVELSCRIPT_DIR}/catalog.inc")
         COMPILE_DEFINITIONS "PAIN_LEVELSCRIPT_DIR=\"${PAIN_LEVELSCRIPT_DIR}\"")
     if(NOT MSVC)
         set_source_files_properties(${LEVELSCRIPT_SOURCES} PROPERTIES
-            COMPILE_OPTIONS "-w;-ffp-contract=off;-O1")
+            COMPILE_OPTIONS "-w;-ffp-contract=off;$<$<NOT:$<CONFIG:Debug>>:-O1>")
     endif()
 endif()
 
@@ -289,6 +289,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # The runtime is C++, and on Apple also Objective-C. Letting CMake infer the
 # link language from the generated C would leave the C++ standard library out.
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
+
+if(PS5)
+    set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".elf")
+endif()
 
 # Windows system import libraries. dbghelp symbolizes crash-handler addresses
 # against the PDB, user32 and gdi32 are what the backend's window and its GDI

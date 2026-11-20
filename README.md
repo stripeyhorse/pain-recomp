@@ -35,9 +35,12 @@ frame captures stay local.
   Medius services. The toolkit's optional psnr client provides parts of PSN
   emulation. PAIN's end-to-end service path is unverified.
 
+- **PS5 Phase A: cross-builds as a Prospero ELF (null backend).**
+  Real-console headless verification is Phase B.
+
 Linux null-backend runs provide a headless boot and profile check. Windows
-and PS5 have no acceptance result. See [NOTES.md](NOTES.md) for backend and
-gameplay evidence.
+has no acceptance result. See [NOTES.md](NOTES.md) for backend and gameplay
+evidence.
 
 ## Workstation preparation
 
@@ -89,6 +92,33 @@ cmake --build build --parallel 8
 Use `PS3_GAMEDATA_ROOT` to keep the player profile separate from the
 installed cache. The native bootstrap may show an offline network message
 before the main menu. The first run can ask for consent before it continues.
+
+### Cross-build for PS5
+
+Use ps5-payload-sdk v0.50 with host LLVM 19 and a Prospero build of SDL2
+from [ps5-payload-dev/SDL](https://github.com/ps5-payload-dev/SDL/tree/release-2.30.x-ps5).
+Install SDL2 and its target dependencies, including libsamplerate for
+the PS5 audio build, under `PS5_SDL2_PREFIX`. Use the toolkit checkout
+through `9df357a` for the PS5 portability fixes. Prepare the local PPU, SPU
+and PRX lifts as above.
+
+```sh
+cmake -S . -B build/ps5 -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake" \
+    -DPS3RECOMP_DIR=../ps3recomp \
+    -DSDL2_DIR="$PS5_SDL2_PREFIX/lib/cmake/SDL2" \
+    -DCMAKE_EXE_LINKER_FLAGS="-L\"$PS5_SDL2_PREFIX/lib\"" \
+    -DPS3RECOMP_RSX_VULKAN=OFF -DPS3RECOMP_FFMPEG_RUNTIME=OFF \
+    -DPAIN_USE_PREPARED_PPU=ON \
+    -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS_DEBUG=-O0 -DCMAKE_C_FLAGS_DEBUG=-O1
+cmake --build build/ps5 --parallel 3 --target PainRecomp
+readelf -h -l -d build/ps5/PainRecomp.elf
+```
+
+This configuration reduces build time for the lifted PPU and LevelScript
+sources. The payload takes the guest EBOOT as its first argument and uses
+`PS3_VFS_ROOT` for the disc root and `PS3_HDD0_ROOT` for the writable cache
+root. See the [PS5 port plan](docs/PS5-PORT.md) for console acceptance criteria.
 
 ### Deploy to Beast
 
