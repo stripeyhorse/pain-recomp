@@ -289,6 +289,26 @@ path (independently vision-verified). Beast's copy of these notes and the run
 logs live in `beast:~/pain-ps3/`. This run doubles as the desktop-Vulkan
 reference the PS5 Phase C plan calls for.
 
+## Gameplay bring-up (bobby, scripted input): menu → Crash Course → the PRX wall
+
+Vision-verified scripted navigation on bobby: the MAIN MENU → **Crash Course**
+loading screen (illustrated slingshot + Jarvis), tutorial `levelData.chl` and
+Downtown scene assets opening — then the level reset crashed on Continue.
+
+The wall is the **LevelScript PRX subsystem**, exactly as the import analysis
+predicted: `sys_prx_load_module` / `sys_prx_start_module` and the
+`LevelScriptExport` interface are unresolved, so the game's per-level script
+module (91 shipped `LevelScript.sprx`, 90 unique) never loads; after the
+Continue press, guest PPU thread 1 spins at `0x002330AC` until the runtime
+aborts. SINGLE PLAYER itself shows a padlock (gated), making Crash Course the
+playable test path. Evidence frames + logs in the Obsidian vault
+("20-Projects/Pain PS3/Evidence/2026-11-20-bobby-gameplay/").
+
+Next subsystem: decrypt the 91 level PRXs, lift each (lift_prx.py, base above
+the game's segments), and implement the port's `ps3_load_prx_modules()` hook
+to serve them by path and bind LevelScriptExport's ten NIDs to the active
+module's exports (the FIRMWARE_LLE.md step-4 pattern applied to game PRXs).
+
 ## Published
 - https://github.com/stripeyhorse/pain-recomp — this port (clean single-root
   history; no game code, data, captures or carved binaries are tracked or
