@@ -7,10 +7,10 @@ values, then the defaults. Set `PAIN_SETTINGS_VERBOSE=1` for the resolved
 values and native-menu diagnostics.
 
 PAIN's Audio and Controller screens live under **Extras** and in the pause
-menu. PAIN handles its audio sliders and profile itself. The existing
-**Sync Rate** control in PAIN's debug menu applies a live frame cap when the
-game exposes that screen. Selecting a value saves it to the INI. Access from
-the retail pause menu still needs verification.
+menu. PAIN handles its audio sliders and profile itself. On BCES00548,
+**Sync Rate** follows Volume in Audio. Highlight it and press Cross to cycle
+60 FPS, 30 FPS, 20 FPS and Variable. Each selection applies at once and
+updates the INI.
 
 | Key | Values | Effect |
 | --- | --- | --- |

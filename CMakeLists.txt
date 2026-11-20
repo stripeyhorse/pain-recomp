@@ -64,27 +64,58 @@ if(NOT RECOMP_SOURCES)
         "there is nothing to run.")
 endif()
 
-# PAIN switches guest stacks inside a handwritten PPU function. Keep its
-# original lift available for inspection and link a host continuation in its
-# place. Change only the definition so direct and indirect calls share it.
-set(COROUTINE_DEFINITION "void func_00011810(ppu_context* ctx) {")
+# Rename definitions only. Both direct calls and the registered function table
+# still use the original guest names, so each call goes through the port hook.
+set(pain_missing_wrappers 00011810 00132D24 001AEFB0 0026E360)
+set(pain_missing_fallbacks 001461FC 0015C7F8)
 foreach(source IN LISTS RECOMP_SOURCES)
-    file(STRINGS "${source}" definition LIMIT_COUNT 1
-         REGEX "^void func_00011810\\(ppu_context\\* ctx\\) [{]$")
-    if(definition)
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
-        file(READ "${source}" original)
-        string(REPLACE "${COROUTINE_DEFINITION}"
-             "static void original_func_00011810(ppu_context* ctx) {" lifted "${original}")
-        set(coroutine_lift "${CMAKE_CURRENT_BINARY_DIR}/ppu_with_host_coroutine.cpp")
-        file(GENERATE OUTPUT "${coroutine_lift}" CONTENT "${lifted}")
-        list(REMOVE_ITEM RECOMP_SOURCES "${source}")
-        list(APPEND RECOMP_SOURCES "${coroutine_lift}")
+    file(STRINGS "${source}" definitions REGEX
+        "^void func_(00011810|00132D24|001AEFB0|0026E360|001461FC|0015C7F8)\\(ppu_context\\* ctx\\) [{]$")
+    if(NOT definitions)
+        continue()
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+    file(READ "${source}" lifted)
+    foreach(definition IN LISTS definitions)
+        string(SUBSTRING "${definition}" 10 8 address)
+        if(address IN_LIST pain_missing_fallbacks)
+            list(REMOVE_ITEM pain_missing_fallbacks "${address}")
+        elseif(address STREQUAL "001AEFB0")
+            # This worker exits through sys_ppu_thread_exit. Hook its
+            # synchronous AutoLoad call before the game publishes completion.
+            set(load_call "ctx->lr = 0x001AF068; func_00962344(ctx);")
+            string(FIND "${lifted}" "${load_call}" load_site)
+            if(load_site EQUAL -1)
+                message(FATAL_ERROR "Could not locate the BCES00548 profile load call.")
+            endif()
+            string(REPLACE "${load_call}"
+                "ctx->lr = 0x001AF068; pain_auto_load_profile(ctx);" lifted "${lifted}")
+            list(REMOVE_ITEM pain_missing_wrappers "${address}")
+        else()
+            list(REMOVE_ITEM pain_missing_wrappers "${address}")
+            set(original "void original_func_${address}(ppu_context* ctx) {")
+            if(address STREQUAL "00011810")
+                set(original "static ${original}")
+            endif()
+            string(REPLACE "${definition}" "${original}" lifted "${lifted}")
+        endif()
+    endforeach()
+    # The guarded lift shares one flag for all sites. Keep the tutorial
+    # fallbacks dormant when the live stat is present.
+    string(REGEX REPLACE "if [(]g_pain_unlock_all[)]([^\n]*insn patch 0x001(4628C|5C9F4):)"
+        "if (pain_unlock_fallback())\\1" lifted "${lifted}")
+    get_filename_component(chunk "${source}" NAME)
+    set(wrapped "${CMAKE_CURRENT_BINARY_DIR}/wrapped_${chunk}")
+    file(GENERATE OUTPUT "${wrapped}"
+        CONTENT "#include \"ppu_recomp.h\"\nextern \"C\" bool pain_unlock_fallback();\nvoid pain_auto_load_profile(ppu_context*);\n${lifted}")
+    list(REMOVE_ITEM RECOMP_SOURCES "${source}")
+    list(APPEND RECOMP_SOURCES "${wrapped}")
+    if(NOT pain_missing_wrappers AND NOT pain_missing_fallbacks)
         break()
     endif()
 endforeach()
-if(NOT coroutine_lift)
-    message(FATAL_ERROR "The BCES00548 EBOOT lift is missing coroutine entry 0x00011810.")
+if(pain_missing_wrappers OR pain_missing_fallbacks)
+    message(FATAL_ERROR "The BCES00548 EBOOT lift is missing: ${pain_missing_wrappers} ${pain_missing_fallbacks}")
 endif()
 
 list(LENGTH RECOMP_SOURCES RECOMP_SOURCE_COUNT)

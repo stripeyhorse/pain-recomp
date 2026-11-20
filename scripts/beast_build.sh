@@ -65,8 +65,10 @@ build_deps() {
 
 build_port() {
     local port="$root/pain-recomp"
+    python3 "$port/scripts/prepare_levelscripts.py" "$root/game/PS3_GAME/USRDIR" --check-full
     cmake -S "$port" -B "$port/build" -G Ninja \
         -DCMAKE_PREFIX_PATH="$prefix" -DCMAKE_BUILD_TYPE=Release \
+        -DPAIN_LEVELSCRIPT_DIR="$port/prx/generated/full" \
         -DPS3RECOMP_DIR="$root/ps3recomp" -DPS3RECOMP_RSX_VULKAN=ON \
         -DPS3RECOMP_VULKAN_INCLUDE_DIR="$prefix/include"
     time cmake --build "$port/build" --target PainRecomp --parallel "$jobs"

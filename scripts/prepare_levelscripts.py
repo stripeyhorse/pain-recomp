@@ -8,6 +8,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import struct
@@ -21,7 +22,7 @@ STRIDE = 0x100000
 DESCRIPTOR_RESERVE = 0x1000
 # The bank sits above managed SPU LS (0x30000000–0x301fffff) and below
 # the game's mmapper allocations (0x40000000 family). Each lift keeps its EA.
-BASE_LIMIT = 0x40000000
+BASE_LIMIT = 0x3FF00000  # Reserve the top slot for the port frontend.
 START = "0xBC9A0086"
 STOP = "0xAB779874"
 
@@ -153,27 +154,60 @@ def emit_catalog(out, results, aliases):
     (out / "catalog.inc").write_text("\n".join(lines) + "\n")
 
 
+def check_full_catalog(parser, out, usrdir, groups):
+    catalog = out / "catalog.inc"
+    if not catalog.is_file():
+        parser.error(f"Missing {catalog}. Generate it with --rpcs3 /path/to/RPCS3.")
+    data = catalog.read_text()
+    aliases = dict(re.findall(r'^    \{("(?:[^"\\]|\\.)*"), &(level_\d{3})\},$', data, re.M))
+    expected = {
+        json.dumps(path.relative_to(usrdir).as_posix()): f"level_{index:03d}"
+        for index, paths in enumerate(groups.values()) for path in paths
+    }
+    if len(groups) != 90 or len(expected) != 91 or aliases != expected:
+        parser.error("Expected the full BCES00548 LevelScript catalog (90 modules, 91 paths).")
+
+    for stem in sorted(set(expected.values())):
+        image = out / "modules" / stem / f"{stem}_image.bin"
+        lift = out / "lift" / stem
+        match = re.search(rf'^    "{stem}", 0x[0-9a-f]+, (0x[0-9a-f]+),', data, re.M)
+        if (not match or not image.is_file() or image.stat().st_size != int(match[1], 16)
+                or not (lift / f"{stem}.h").is_file()
+                or not all((lift / f"{stem}.cpp_{chunk}.cpp").is_file()
+                           for chunk in ("000", "001", "002", "table"))):
+            parser.error(f"Incomplete catalog entry {stem}. Regenerate {out}.")
+    print(f"Full LevelScript catalog ready: {out} (90 modules, 91 paths)")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("usrdir", type=Path, help="Local PS3_GAME/USRDIR")
-    parser.add_argument("--rpcs3", type=Path, required=True, help="RPCS3 executable or AppImage")
+    parser.add_argument("--rpcs3", type=Path, help="RPCS3 executable or AppImage")
     parser.add_argument("--toolkit", type=Path, default=PORT.parent / "ps3recomp")
     parser.add_argument("--output", type=Path, default=GENERATED / "full",
                         help="A new directory under prx/generated")
+    parser.add_argument("--check-full", action="store_true", help="Validate the existing full catalog")
     parser.add_argument("--only", help="Only build modules matching this USRDIR-relative glob")
     parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 1))
     args = parser.parse_args()
     usrdir = args.usrdir.resolve()
     out = args.output.resolve()
+    groups = defaultdict(list)
+    for path in sorted(usrdir.glob("Themes/*/Levels/**/Scripts/PS3_PPU_Release/LevelScript.sprx")):
+        groups[hashlib.sha256(path.read_bytes()).digest()].append(path)
+    if args.check_full:
+        if args.only:
+            parser.error("--check-full requires a complete catalog")
+        check_full_catalog(parser, out, usrdir, groups)
+        return
     if GENERATED not in out.parents or out.exists():
         parser.error("--output must be a new directory under prx/generated")
     if args.jobs < 1:
         parser.error("--jobs must be positive")
+    if not args.rpcs3:
+        parser.error("--rpcs3 is required to generate the catalog")
     rpcs3 = args.rpcs3.resolve(strict=True)
     tools = args.toolkit.resolve() / "tools"
-    groups = defaultdict(list)
-    for path in sorted(usrdir.glob("Themes/*/Levels/**/Scripts/PS3_PPU_Release/LevelScript.sprx")):
-        groups[hashlib.sha256(path.read_bytes()).digest()].append(path)
     if not groups or FIRST_BASE + len(groups) * STRIDE > BASE_LIMIT:
         parser.error(f"Unexpected number of unique modules: {len(groups)}")
 

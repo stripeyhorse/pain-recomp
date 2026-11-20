@@ -11,14 +11,6 @@
 #include <string>
 #include <string_view>
 
-// The optional guarded lift has a pre-main environment initializer. Refresh
-// its guard after settings.ini wins precedence and before the guest starts.
-#if defined(__APPLE__)
-extern "C" int g_pain_unlock_all __attribute__((weak_import));
-#elif defined(__GNUC__) && !defined(_WIN32)
-extern "C" int g_pain_unlock_all __attribute__((weak));
-#endif
-
 namespace pain_settings {
 namespace {
 using namespace std::literals;
@@ -230,10 +222,6 @@ bool load()
             parse_number(value, parsed);
             cap.store(parsed, std::memory_order_relaxed);
         }
-#if defined(__APPLE__) || (defined(__GNUC__) && !defined(_WIN32))
-        if (option.key == "unlock_trainer" && &g_pain_unlock_all)
-            g_pain_unlock_all = value == "on";
-#endif
         if (trace) {
             const auto* applied = std::getenv(option.env);
             std::fprintf(stderr, "[settings] %s=%s (%s) -> %s=%s\n", option.key.data(), value.c_str(),
@@ -250,9 +238,14 @@ bool save_frame_cap(int value)
     std::string contents;
     std::error_code error;
     if (std::filesystem::exists(settings_path, error)) {
+        if (!std::filesystem::is_regular_file(settings_path, error)) return false;
         std::ifstream existing(settings_path, std::ios::binary);
-        contents.assign(std::istreambuf_iterator<char>(existing), {});
-        if (existing.bad() || !existing.is_open()) return false;
+        if (!existing) return false;
+        try {
+            contents.assign(std::istreambuf_iterator<char>(existing), {});
+        } catch (const std::ios_base::failure&) {
+            return false;
+        }
     }
     if (error) return false;
 

@@ -63,14 +63,34 @@ PS3_HDD0_ROOT=$PWD/../hdd0 ./build/PainRecomp <EBOOT.elf>
 Sha256 of the decrypted EBOOT.elf this port was brought up against:
 `411d00aa3809706376bc8fe55e309844310e37e69152bdbb15627be5833fe40b`.
 
+### Standard deployment
+
+The Bobby and Beast push scripts expect the full LevelScript catalogue. They
+validate the 90 modules and 91 disc paths, apply the trainer guards to a
+compatible local EBOOT lift, and copy the catalogue's build sources and
+runtime images. Set `RPCS3_BIN` for the first push if the catalogue needs to
+be generated, or prepare it locally with the following command.
+
+```sh
+python3 scripts/prepare_levelscripts.py "<disc>/PS3_GAME/USRDIR" --rpcs3 /path/to/RPCS3
+```
+
+The remote build scripts explicitly select `prx/generated/full`. This
+replaces a cached selection of the tutorial-only catalogue in CMake.
+The generated catalogue stays outside Git.
+
 ### Unlock trainer
 
-After lifting BCES00548 with `patches/unlock-trainer.json` and rebuilding,
-launch with `PAIN_UNLOCK_ALL=1` to bypass the Crash Course requirement and
-mark the local content catalogue available for this session. The trainer is
-off by default. Unset the variable and restart to restore the original checks.
-Use a separate `PS3_GAMEDATA_ROOT` for trainer sessions to keep campaign progress
-earned while playing separate from your normal save.
+Launch with `PAIN_UNLOCK_ALL=1` to set the live Crash Course completion stat
+for the session. Normal catalogue checks and their UI readers share the
+guarded lift's owned state. The native save callback filters the trainer's
+temporary stat from the profile payload. To run stock, restart with the
+environment variable unset and no `unlock_trainer = on` entry in the INI.
+Campaign progress earned through gameplay is saved normally.
+
+For a local checkout with an existing lift, run
+`python3 scripts/relift_unlock_trainer.py "<disc>/PS3_GAME/USRDIR/EBOOT.elf"`
+before rebuilding. The full lift command above already includes the guards.
 
 ## The four boot blockers, and their fixes
 

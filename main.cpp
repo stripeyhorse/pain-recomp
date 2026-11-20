@@ -37,6 +37,7 @@
  * passthrough to <windows.h>; off Windows the toolkit's shim supplies the same
  * names over pthreads and mmap, so the call sites below are written once. */
 #include "settings/settings.h"
+#include "unlock_trainer.h"
 #include "win32_compat.h"
 
 #include <stdint.h>
@@ -436,7 +437,7 @@ int main(int argc, char** argv)
 
     if (!pain_settings::load()) return 1;
     printf("=== ps3recomp game runner ===\n");
-    printf("[settings] Native Audio and Controller are under Extras or the pause menu.\n");
+    printf("[settings] Sync Rate is in Audio, under Extras or the pause menu.\n");
 
     if (!alloc_guest_vm()) {
         fprintf(stderr, "ERROR: could not allocate the guest address space\n");
@@ -461,6 +462,7 @@ int main(int argc, char** argv)
       cellGame_init_from_paramsfo(sfo_path); }
 
     ppu_recomp_register();   /* lifted function table -> address map */
+    install_unlock_trainer();
     pain_settings::install_native_hooks();
     ps3_load_prx_modules();  /* this game's lifted system PRX, if it has any */
     ppu_hle_init();          /* firmware import NID -> HLE handlers */
