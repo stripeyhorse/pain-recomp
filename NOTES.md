@@ -104,16 +104,46 @@ cd ../pain-recomp && cmake -B build -G Ninja -DPS3RECOMP_DIR=<ps3recomp> && cmak
 PS3_VFS_ROOT=<dir-with-game-files> ./build/PainRecomp <EBOOT.elf>
 ```
 
-## Status
+## Bring-up log
+
+### Boot 1 (first link): clean CRT → engine init → r2=0 cascade → `sys_process_exit(1)`
+
+The game boots: CRT, TLS, argv (`/dev_bdvd/PS3_GAME/USRDIR/EBOOT.BIN`), RSX null
+backend init at 1280x720, then a static-ctor walker (`0xC7F60`, 548-entry list at
+`0xB80894`) correctly dispatches ~313 module-registrar ctors with r2=0xC0D1F8.
+Deep in ctor #314's subtree (`0x4A9640`, a module-block init gate using
+`sys_ppu_thread_get_id` + `sys_lwmutex_lock`), r2 silently becomes 0 and every
+TOC-relative load cascades into null-page accesses until the game bails.
+
+**Root cause (found via PPU_TOCWATCH/PS3_CALLTRACE instrumentation added locally):
+the title's toolchain emits the ELFv1 TOC restore `ld r2, 40(r1)` after EVERY `bl`**
+(50,988 sites in the lifted code). On hardware the callee's glink/PLT stub saves
+the caller's r2 into the ABI-reserved slot at sp+0x28 before jumping; the lifted
+direct call bypasses that stub, so each restore reads stale stack garbage —
+stack roulette that 313 ctors won and #314 lost.
+
+**Fix:** `ppu_lifter.py` now emits `vm_write64(ctx->gpr[1]+0x28, ctx->gpr[2])`
+before every direct `bl` call — exactly the glink save (patch in
+`patches/ps3recomp-local.patch`, applied to the vendored toolkit).
+
+Also observed, not yet fixed: one indirect call through a game import-table slot
+landed on an HLE-inject OPD (`0x20000028`, opd[0]=0) and was dropped by the
+null-call handler — symptom of the poisoned chain; revisit if it survives the TOC fix.
+
+Local runtime diagnostics added (all upstreamable): r2 in null-page reports,
+`PPU_TOCWATCH` on POSIX, r2 in the `[CALL]` indirect-call trace.
 
 - [x] Dump acquired from Unraid, unzipped, retail structure verified (PARAM.SFO: PAIN, BCES00548, 01.00)
 - [x] EBOOT decrypted (RPCS3 CLI)
 - [x] Stage-1 PPU analysis: 25,475 functions / 418 imports / 31 libs
-- [x] SPU images extracted (3)
-- [ ] PPU lift → C++
-- [ ] SPU lift + workload registration
-- [ ] First link + CRT boot (null backend)
+- [x] SPU images extracted (3) and identified (Havok SPURS collide+integrate) + lifted (898 funcs)
+- [x] PPU lift → C++ (37,534 functions, 110 chunks, 1.3 GB)
+- [x] First link + CRT boot (null backend) — boots, then r2=0 cascade (root cause found + fixed: glink TOC save; rebuild in flight)
+- [ ] Re-lift + boot past the ctor list into game init
 - [ ] First frames (Vulkan on beast / Metal on bobby)
 - [ ] Menus → in-game bring-up loop
+- [ ] LevelScript.sprx pipeline: decrypt + lift the 91 level PRXs, bind LevelScriptExport
 - [ ] macOS .app packaging (bobby)
 - [ ] PS5 exploration (later; needs homebrew toolchain + jailbroken console)
+
+## Status
