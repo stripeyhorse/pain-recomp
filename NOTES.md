@@ -37,6 +37,21 @@ and the cache files. It produced the matching ELF and 8,044 cache files,
 then reused both on a second invocation.
 See [README.md](README.md) for the workstation and target commands.
 
+## Silhouette round 3: depth-clear RULED OUT; matrix-generation hazard prime
+
+Beast cleared Jarvis's depth surface to 1.0 before the prepass for 20
+consecutive frames, plus a forced second clear on the same surface -- the
+sling ghost and grey airborne outfit still reproduced (identical 6,670-pixel
+silhouette colour vs round 2). NOT a stale-depth/clear bug. The SPU jobs read
+DIFFERENT GENERATIONS of the same guest matrix blocks: reading directly from
+the PPU's source buffer improved one release frame in an overlapping
+diagnostic run (not reproducible single-process); watchplaces put the fault
+UPSTREAM of the prepass job's matrix read. Prime suspect: a cross-job
+memory-ordering hazard in the SPU runtime's shared-matrix path (DMA /
+lock-line / sync semantics between producer and the two consumer jobs). A
+full release-to-landing video exists (isolated-flight.mp4). Round 4 hunts the
+matrix-generation ordering contract.
+
 ## Silhouette root cause (round 2, beast Vulkan): cross-frame depth rejection
 
 The silhouette is NOT a shader-translation bug. At release, the DEPTH PREPASS
