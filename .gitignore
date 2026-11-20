@@ -1,0 +1,15 @@
+# Generated pipeline output — regenerate from your own dump, never commit
+analysis/
+spu-images/
+recompiled/
+spu/
+build/
+*.log
+
+# Game data never belongs in this repo
+game/
+*.zip
+*.iso
+EBOOT.BIN
+EBOOT.elf
+*.pak
