@@ -81,6 +81,23 @@ cache with digest checks; three cold runs past the install gate with sustained
 vblank/flip/FIFO and the null-backend pixel result). The full hand-off
 checklist is in the Obsidian vault and docs/PS5-PORT.md.
 
+## Silhouette round 4: stale matrix handoff CONFIRMED, dispatch edge still open
+
+Both passes fetch the SAME guest addresses; at release the prepass consumed
+the previous pose while the material pass consumed the new one. Moving the
+PPU snapshot copy earlier ALIGNED the passes at release and removed the
+body-shaped sling ghost: silhouette pixels 6,670 -> 2,489. But the grey
+returned at frame 3681: the prepass fetched its matrices **1.38 ms BEFORE
+the PPU entered the pose update** -- the earlier copy still arrived too late.
+The control then stalled before landing polling an RSX reference. The
+unidentified edge: whatever enqueue/scheduling ordering should keep the
+prepass job behind the pose update. No fix commit (both repos unchanged --
+honest open state). Fixtures: null boot + 7 SPU/SPURS targets pass; Vulkan
+baseline 20/21 (an anisotropic mip failure noted); CTest 31/35 (4 fixture
+link failures, environment-suspect). The candidate seam is now the SPURS
+job-dispatch order vs the PPU update timeline (and the RSX reference stall
+points at the report/label ordering machinery).
+
 ## Silhouette round 3: depth-clear RULED OUT; matrix-generation hazard prime
 
 Beast cleared Jarvis's depth surface to 1.0 before the prepass for 20
