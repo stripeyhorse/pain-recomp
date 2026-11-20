@@ -133,6 +133,46 @@ null-call handler — symptom of the poisoned chain; revisit if it survives the 
 Local runtime diagnostics added (all upstreamable): r2 in null-page reports,
 `PPU_TOCWATCH` on POSIX, r2 in the `[CALL]` indirect-call trace.
 
+### Boot 3 (title-ID fix + pre-seed): INSTALL GATE PASSED — game runs
+
+Root cause of the whole install saga (sol 6.2 xhigh report): our port's cellGame
+reported the placeholder title ID `BLES00000` because `main.cpp` never called
+`cellGame_init_from_paramsfo` — so Pain never activated its disc SKU
+(`EP9000-BCES00548_00`), took a wrong game-data path, and fell into the
+installer, whose SPURS-side consumer never acked (writer never opened an HDD
+file; the 4x8MB pak reads = the producer's ring filling).
+
+The real gate is a plain `cellFsStat` on `<USRDIR>/CacheFlags/CacheDone.flg`
+(existence only; the installed tree it certifies is 8,044 LOOSE files — the
+loader has no archive fallback, so flag-only bypass would break menus).
+
+**Fix (both parts applied):**
+1. `main.cpp` now calls `cellGame_init_from_paramsfo(<disc>/PS3_GAME/PARAM.SFO)`
+   after deriving the VFS root.
+2. `scripts/extract_cache.py` pre-seeds the cache offline: CacheDesc.dat is a
+   manifest of 8,044 records (BE u32 size + 252-byte path), payloads are
+   contiguous uncompressed slices of CacheData.pak; extracted into
+   `$PS3_HDD0_ROOT/game/BCES00548/USRDIR/` + the 5-byte `Flag\0` marker.
+   1,061,512,652 bytes extracted, byte-exact against the pak.
+
+**Evidence it works (local, run9):** `Activating SKU EP9000-BCES00548_00`,
+`All blu-ray files are cached`, then HDD opens of real assets — ICON0/PIC1,
+`Image/bin/shaders/*.vbin/.fbin` (the game's GPU shader programs), UI/Effects
+shaders — and a steady multi-thread idle (audio mixer cadence).
+
+**bobby (Apple M2, Metal):** pre-seed extracted locally (byte-exact), port
+rebuilt, **running**: `[RSX metal] windowed on Apple M2 (1280x720)`, SKU
+activated, gate passed, register-file draw engine executing the game's draw
+commands at ~125% CPU. Last mile: every draw was dropped with `guest shaders
+off (translator not built)` — `scripts/mac_shaders.sh` builds glslang +
+SPIRV-Cross from source into `~/pain-ps3/prefix` (no sudo) and rebuilds with
+MSL translation on.
+
+Firmware (for the optional RPCS3 reference): PS3 4.91 PUP fetched from
+archive.org's preservation mirror (sha1 6c5e520b64cd39d28edc19e0f1a5c3e04d0c3d8a,
+206,187,676 bytes) — Sony's own update CDN domain no longer resolves from any
+of the local machines or the VPSes.
+
 ### Boot 2 (TOC fix): full boot → install flow → SPURS consumer stall
 
 Zero null-page events after the lifter fix. Boot: cellGame ContentPermit ✓,

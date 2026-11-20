@@ -68,6 +68,7 @@ extern "C" {
 uint32_t ppu_load_elf(const char* path);      /* ELF -> guest RAM, returns entry OPD */
 void     ppu_recomp_register(void);           /* generated: lifted table -> address map */
 void     ppu_hle_init(void);                  /* firmware import NID -> HLE handler */
+extern "C" void cellGame_init_from_paramsfo(const char* sfo_path); /* libs/system/cellGame.c */
 void     ppu_sysprx_register(void);           /* boot-critical CRT (sys_initialize_tls, ...) */
 void     ppu_fs_register(void);               /* cellFs over the real game directory */
 void     lv2_init_syscalls(void);             /* the lv2 syscall table */
@@ -433,6 +434,14 @@ int main(int argc, char** argv)
 
     derive_vfs_root(argv[1]);
     printf("[boot] VFS root: %s\n", ppu_vfs_root);
+
+    /* Read the disc's PARAM.SFO so cellGame answers with the real title ID and
+     * category (BCES00548, disc) instead of the placeholder. Pain selects its
+     * SKU, game-data paths and its "already installed?" gate off these answers;
+     * with the placeholder it took a wrong path and spun in the installer. */
+    { char sfo_path[1100];
+      snprintf(sfo_path, sizeof sfo_path, "%s/PS3_GAME/PARAM.SFO", ppu_vfs_root);
+      cellGame_init_from_paramsfo(sfo_path); }
 
     ppu_recomp_register();   /* lifted function table -> address map */
     ps3_load_prx_modules();  /* this game's lifted system PRX, if it has any */

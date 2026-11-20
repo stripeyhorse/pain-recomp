@@ -4,7 +4,9 @@
 # Usage: scripts/first_run.sh [seconds]
 set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-ELF="$HERE/../game/Pain_BCES00548/Pain BCES00548/PS3_GAME/USRDIR/EBOOT.elf"
+ROOT="$(cd "$HERE/.." && pwd)"
+ELF="$ROOT/game/Pain_BCES00548/Pain BCES00548/PS3_GAME/USRDIR/EBOOT.elf"
+export PS3_HDD0_ROOT="$ROOT/hdd0"
 T="${1:-60}"
 cd "$HERE"
 timeout "$T" ./build/PainRecomp "$ELF" 2>&1 | tee "$HERE/run.log"
