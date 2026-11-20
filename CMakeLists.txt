@@ -63,6 +63,7 @@ if(NOT RECOMP_SOURCES)
         "lifted functions and the function table live in those; without them "
         "there is nothing to run.")
 endif()
+
 list(LENGTH RECOMP_SOURCES RECOMP_SOURCE_COUNT)
 message(STATUS "Lifted sources:  ${RECOMP_SOURCE_COUNT} file(s)")
 
@@ -172,9 +173,25 @@ elseif(PORT_ENABLE_SPU)
     endif()
 endif()
 
+set(PAIN_LEVELSCRIPT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/prx/generated/full" CACHE PATH
+    "Generated LevelScript catalog and lifted sources")
+set(LEVELSCRIPT_SOURCES "")
+if(EXISTS "${PAIN_LEVELSCRIPT_DIR}/catalog.inc")
+    file(GLOB LEVELSCRIPT_SOURCES CONFIGURE_DEPENDS "${PAIN_LEVELSCRIPT_DIR}/lift/*/*.cpp")
+    set_source_files_properties(prx/levelscript_reg.cpp PROPERTIES
+        INCLUDE_DIRECTORIES "${PAIN_LEVELSCRIPT_DIR};${PS3RECOMP_DIR}/runtime/prx"
+        COMPILE_DEFINITIONS "PAIN_LEVELSCRIPT_DIR=\"${PAIN_LEVELSCRIPT_DIR}\"")
+    if(NOT MSVC)
+        set_source_files_properties(${LEVELSCRIPT_SOURCES} PROPERTIES
+            COMPILE_OPTIONS "-w;-ffp-contract=off;-O1")
+    endif()
+endif()
+
 add_executable(${PROJECT_NAME}
     main.cpp
     stubs.cpp
+    prx/levelscript_reg.cpp
+    ${LEVELSCRIPT_SOURCES}
     ${PS3RECOMP_SCAFFOLD}
     ${HLE_NID_TABLE}
     ${RECOMP_SOURCES}

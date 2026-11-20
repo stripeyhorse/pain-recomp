@@ -17,3 +17,6 @@ EBOOT.elf
 screenshots/
 spu-jobmods/
 *.ppm
+/prx/generated/
+*.prx
+*.sprx

@@ -17,20 +17,6 @@
 #include "ps3emu/error_codes.h"
 
 /* ---------------------------------------------------------------------------
- * PRX loading
- *
- * main.cpp calls this once, after the lifted function table is registered and
- * vm_base is live, before the game runs. A title that lifts a real system PRX
- * -- libsre, which is cellSpurs and cellSync -- loads its image into guest RAM
- * here and registers its exports. Most ports never need to: the HLE library
- * answers those modules instead.
- * -----------------------------------------------------------------------*/
-
-extern "C" void ps3_load_prx_modules(void)
-{
-}
-
-/* ---------------------------------------------------------------------------
  * Example: Override a specific NID
  *
  * The module system resolves function imports by NID.  To replace a default
