@@ -1,0 +1,74 @@
+From 14d6e2deb9ac618c6daca387fa9bb0f3e73ff017 Mon Sep 17 00:00:00 2001
+From: StripeyHorse <stripeyhorse@gmail.com>
+Date: Fri, 20 Nov 2026 19:41:08 +1100
+Subject: [PATCH] Find jump tables spilled from a TOC-indirect load
+
+---
+ tools/ppu_lifter.py          | 22 +++++++++++++++++++---
+ tools/test_ppu_jumptables.py | 14 ++++++++++++++
+ 2 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/tools/ppu_lifter.py b/tools/ppu_lifter.py
+index 68d1cff..52dffeb 100644
+--- a/tools/ppu_lifter.py
++++ b/tools/ppu_lifter.py
+@@ -4699,9 +4699,25 @@ def discover_jump_tables(all_insns, read_u32, toc, text_lo, text_hi, func_starts
+                             b = [x.strip() for x in w2.operands.split(',')]
+                             if not b or b[0] != _src[0] or w2.mnemonic.startswith(('st', 'lf')):
+                                 continue
+-                            if w2.mnemonic in ('lwz', 'ld') and len(b) == 2 and '(r2)' in b[1]:
+-                                disp = mem_disp(b[1]); r_base = cand
+-                                base_is_ld = (w2.mnemonic == 'ld')
++                            if w2.mnemonic in ('lwz', 'ld') and len(b) == 2 and '(' in b[1]:
++                                src_disp = mem_disp(b[1])
++                                src_base = b[1].split('(')[1].rstrip(')').strip()
++                                if src_base == 'r2':
++                                    disp = src_disp; r_base = cand
++                                    base_is_ld = w2.mnemonic == 'ld'
++                                else:
++                                    # The spilled address can itself come from a
++                                    # TOC-indirect load (e.g. a table field in an
++                                    # animation decoder's globals).
++                                    for parent in reversed([x for x in win_cand if x.addr < w2.addr]):
++                                        c = [x.strip() for x in parent.operands.split(',')]
++                                        if not c or c[0] != src_base or parent.mnemonic.startswith(('st', 'lf')):
++                                            continue
++                                        if parent.mnemonic in ('lwz', 'ld') and len(c) == 2 and '(r2)' in c[1]:
++                                            disp = mem_disp(c[1]); r_base = cand
++                                            base_is_ld = parent.mnemonic == 'ld'
++                                            disp2 = src_disp; disp2_is_ld = w2.mnemonic == 'ld'
++                                        break
+                             break               # nearest definition wins, TOC load or not
+                 elif w.mnemonic in ('lwz', 'ld') and len(a) == 2 and '(' in a[1]:
+                     # TWO-LEVEL base: `lwz r30, d1(r2); lwz r11, d2(r30)`. The
+diff --git a/tools/test_ppu_jumptables.py b/tools/test_ppu_jumptables.py
+index 64ed245..8c25703 100644
+--- a/tools/test_ppu_jumptables.py
++++ b/tools/test_ppu_jumptables.py
+@@ -371,6 +371,7 @@ def main() -> int:
+     test_multi_toc_prefers_targets_near_the_dispatcher()
+     test_bound_compare_beyond_window()
+     test_spilled_base_reused_as_target()
++    test_spilled_toc_indirect_base()
+     if FAILS:
+         print(f"FAILED: {', '.join(FAILS)}")
+         return 1
+@@ -428,5 +429,18 @@ def test_spilled_base_reused_as_target():
+     check("reload of a slot nothing stored is not a base", discover(words, mem), None)
+
+
++def test_spilled_toc_indirect_base():
++    """A table pointer loaded through a TOC global, then spilled to r1."""
++    table, global_ea = 0x11000, 0x81000
++    mem = {TOC + 16: global_ea, global_ea - 8: table,
++           table: 0x100, table + 4: 0x200, table + 8: 0x300}
++    words = [w_lwz(30, 2, 16), w_lwz(7, 30, -8), w_std(7, 1, 0xD0),
++             w_cmplwi(7, 0, 2), w_ld(8, 1, 0xD0), w_slwi(9, 0, 2),
++             w_lwzx(0, 9, 8), w_add(8, 0, 8), w_mtctr(8), w_bctr()]
++    check("spilled TOC-indirect base", discover(words, mem), [0x11100, 0x11200, 0x11300])
++    words[1] = w_lwz(7, 29, -8)
++    check("uninitialized parent cannot produce a table", discover(words, mem), None)
++
++
+ if __name__ == "__main__":
+     sys.exit(main())
