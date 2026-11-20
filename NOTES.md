@@ -343,6 +343,17 @@ unfinished; the native menu tables + dispatch addresses are mapped in the
 implementation report (Obsidian). Known issue: the game's profile save fails on an
 ICON0 write (cellSaveData icon path) — first target for the next pass.
 
+**Trainer v2 (66bb4e1)**: PAIN_UNLOCK_ALL now WRITES T_TUTORIAL=1 into the live
+profile after AutoLoad — icons, entries and every other reader agree on
+"tutorial complete"; the save callback filters the temporary flag so real saves
+stay stock; the 19 guarded patches remain as fallback. **Sync Rate** is a real
+fourth row under Extras -> Audio AND pause-menu Audio (Cross cycles the live
+cap, saves immediately; persistence and write-failure rollback verified by the
+callback probe). **LevelScripts ship in both standard deploy paths** (90 modules
+/ 91 disc paths validated locally, including Downtown FreePlay). Rendered
+padlocks, the on-screen Sync Rate row and playable FreePlay await the next
+bobby run. The fresh-profile autosave still hits the zero-length ICON0 failure.
+
 **LevelScript PRX pipeline**: 90 unique level PRXs lifted and served by disc path
 (commit `ad1324b`), including a toolkit fix for PRX REL64 relocation and dynamic
 export removal (`lift_prx.py`, `prx_loader.h`). The mission is still completing its
