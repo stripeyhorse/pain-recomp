@@ -10,6 +10,7 @@
 #include <atomic>
 #include <algorithm>
 #include <span>
+#include <string>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -156,9 +157,13 @@ void update_video_label(Page page, uint32_t i)
 #else
         option.key == "aspect" || option.key == "vsync";
 #endif
-    std::snprintf(label.data(), label.size(), "%s: %.*s%s%s", option.label,
-                  static_cast<int>(current.size()), current.data(),
-                  option.key == "post_scale" ? "%" : "", restart ? " (restart)" : "");
+    // The game's menu font has no '%' glyph: show the post-process scale as a multiplier (150 -> 1.5x).
+    std::array<char, 16> shown{};
+    if (option.key == "post_scale")
+        std::snprintf(shown.data(), shown.size(), "%gx", std::strtod(std::string(current).c_str(), nullptr) / 100);
+    else
+        std::snprintf(shown.data(), shown.size(), "%.*s", static_cast<int>(current.size()), current.data());
+    std::snprintf(label.data(), label.size(), "%s: %s%s", option.label, shown.data(), restart ? " (restart)" : "");
     set_label(text_slot(page, i), label.data());
 }
 
