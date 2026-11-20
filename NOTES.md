@@ -1,5 +1,15 @@
 # Pain (PS3, BCES00548) — native port log
 
+## JARVIS FLEW (bobby, 2026-11-20, scripted input)
+
+Synthetic input played Crash Course: slingshot release -> flight across
+Downtown -> landing on the marked hydrant -> water spray, green marker
+cleared -> **the tutorial advanced to the Power lesson**. Vision-verified
+frames of release, mid-flight and impact; SPURS/Havok churn in the logs
+during flight. bobby now runs the full 90-module catalogue (rebuilt,
+default cap, isolated save). Known polish: some airborne poses render as
+grey silhouettes (vertex-shader path to chase).
+
 ## THE GAME IS PLAYABLE (bobby, 2026-11-20)
 
 Crash Course runs on bobby (Metal): vision-verified frame 8160 shows **Jarvis
