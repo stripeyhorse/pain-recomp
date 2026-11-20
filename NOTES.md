@@ -133,9 +133,7 @@ null-call handler — symptom of the poisoned chain; revisit if it survives the 
 Local runtime diagnostics added (all upstreamable): r2 in null-page reports,
 `PPU_TOCWATCH` on POSIX, r2 in the `[CALL]` indirect-call trace.
 
-### Boot 3 (title-ID fix + pre-seed): INSTALL GATE PASSED — game runs
-
-Root cause of the whole install saga (sol 6.2 xhigh report): our port's cellGame
+### Boot 3 (title-ID fix + pre-seed): INSTALL GATE PASSED — game runsRoot cause of the whole install saga (sol 6.2 xhigh report): our port's cellGame
 reported the placeholder title ID `BLES00000` because `main.cpp` never called
 `cellGame_init_from_paramsfo` — so Pain never activated its disc SKU
 (`EP9000-BCES00548_00`), took a wrong game-data path, and fell into the
@@ -172,6 +170,25 @@ Firmware (for the optional RPCS3 reference): PS3 4.91 PUP fetched from
 archive.org's preservation mirror (sha1 6c5e520b64cd39d28edc19e0f1a5c3e04d0c3d8a,
 206,187,676 bytes) — Sony's own update CDN domain no longer resolves from any
 of the local machines or the VPSes.
+
+### Boot 4 (guest shaders on): PAIN RUNS AND DRAWS ON BOBBY
+
+`scripts/mac_shaders.sh` built glslang 16.6.0 (ENABLE_OPT=0) + SPIRV-Cross
+from source into `~/pain-ps3/prefix` (sudo-free) and reconfigured the build:
+`Shaders: guest programs translated to MSL`. Relaunch via `scripts/mac_run.sh`:
+
+```
+[RSX metal] windowed on Apple M2 (1280x720), guest shaders on
+All blu-ray files are cached
+[rsx engine] pipeline ... guest vp 6, fp 27, ... -> ok   (7 compiled, 0 drops)
+ps: PainRecomp at ~135% CPU, sustained live loop
+```
+
+The game's own vertex/fragment programs compile and draw every frame on the
+M2's GPU through the register-file draw engine. Remaining polish, not blockers:
+navigate the frontend with real input (cellPad via SDL2), audio out, in-game
+SPURS physics jobs, per-title tuning. The one thing remote logs cannot show
+is the pixels on bobby's screen — confirm by looking at the window.
 
 ### Boot 2 (TOC fix): full boot → install flow → SPURS consumer stall
 
