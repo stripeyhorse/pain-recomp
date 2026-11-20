@@ -81,6 +81,25 @@ cache with digest checks; three cold runs past the install gate with sustained
 vblank/flip/FIFO and the null-backend pixel result). The full hand-off
 checklist is in the Obsidian vault and docs/PS5-PORT.md.
 
+## Silhouette round 6: BROKEN IN PRACTICE — 0 pixels, two independent flights
+
+**Jarvis textured from release through street contact, twice, with 0
+silhouette-colour pixels in both first airborne crops (6,670 baseline) and no
+RSX stalls.** The mechanism, stated in full: the writer publishes BOTH
+consumer jobs (prepass + material) on the SAME SecondSpurs list BEFORE the
+kick; the prepass reads the shared pose before the PPU overwrites it, the
+material job after -- a producer/consumer race inside one job-list generation.
+The delivered mitigation: **pin the completed pose at the kick** -- both jobs
+read matching matrix hashes, depth testing preserved; Jarvis renders one list
+generation behind the unpinned material pass (an acceptable visual trade).
+Shipped as an opt-in relink + launcher (epoch-build/PainRecomp-trace with the
+pin-at-kick gate). Gating first admission on the ready store did NOT work
+(6,670 px) -- the kick-time pose pin is the lever. Residual: the sling band
+still turns grey in some later frames. The general toolkit fix remains open
+(round-7 brief written: RPCS3 reference comparison on beast, the guest waits
+at 0x00191afc / 0x001837b8, the sling band's own pairing, the FIFO park at
+ring wrap). Suite green throughout (35/35, 21/21, 7/7).
+
 ## Silhouette round 5: SecondSpurs admission race measured; suite fully green
 
 Trace on beast: the prepass worker was admitted by the SECOND SPURS instance
