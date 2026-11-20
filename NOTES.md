@@ -81,6 +81,21 @@ cache with digest checks; three cold runs past the install gate with sustained
 vblank/flip/FIFO and the null-backend pixel result). The full hand-off
 checklist is in the Obsidian vault and docs/PS5-PORT.md.
 
+## Silhouette round 5: SecondSpurs admission race measured; suite fully green
+
+Trace on beast: the prepass worker was admitted by the SECOND SPURS instance
+**2.6 us before the game's ready-count store** -- and that store itself ran
+39 ms ahead of pose-update entry, with the snapshot copy arriving 565 ms
+after the stale GET. Suppressing all unrequested admissions stalled the game
+(the early admission is load-bearing elsewhere) -- so the fix is not "admit
+later" globally. A hardware watchpoint located the graphics job-header writer
+and the kick path; round 6 traces the exact release header at that writer and
+tests which dependency should govern the prepass matrix fetch. GCM_PARK_GRACE
+ruled out (zero resyncs, no visual change). Suite health after the round:
+**35/35 CTest on every backend, 21/21 Vulkan fixtures, null boot + 7 SPU/SPURS
+targets** -- with two real fixes committed: Vulkan now honours PS3_ANISO
+(previously ignored), and the four SPU/syscall fixture link failures fixed.
+
 ## Silhouette round 4: stale matrix handoff CONFIRMED, dispatch edge still open
 
 Both passes fetch the SAME guest addresses; at release the prepass consumed
