@@ -37,6 +37,21 @@ and the cache files. It produced the matching ELF and 8,044 cache files,
 then reused both on a second invocation.
 See [README.md](README.md) for the workstation and target commands.
 
+## Silhouette root cause (round 2, beast Vulkan): cross-frame depth rejection
+
+The silhouette is NOT a shader-translation bug. At release, the DEPTH PREPASS
+draws Jarvis's OLD sling pose while the MATERIAL PASS draws his airborne pose;
+the next frame's material draw is then depth-REJECTED against that stale
+depth. Proven: active programs, transform constants and texture bindings all
+match across the boundary; shaders byte-identical; and disabling depth test on
+one garment alone kept it textured while the depth-tested trousers went grey.
+SPU DMA reads matched completed writes, but the prepass data already held the
+previous pose when read. Two candidates remain -- the backend mishandling the
+per-frame depth CLEAR / surface lifecycle, or a one-frame pose-buffer ordering
+hazard between the SPU job and the draw engine. Round 3 runs the cheap
+discriminating experiment (force depth clear) first, then fixes the ordering
+seam if clears check out.
+
 ## Best-it-can-be sweep: COMPLETE
 
 - **ICON0 save FIXED (d700c39)**: the game skips its artwork loader, then writes
