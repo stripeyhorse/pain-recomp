@@ -12,7 +12,7 @@ cd "$SRC"
 echo "== glslang"
 [ -d glslang ] || git clone --depth 1 https://github.com/KhronosGroup/glslang
 cmake -S glslang -B glslang/build -G Ninja -DCMAKE_INSTALL_PREFIX="$P" \
-      -DCMAKE_BUILD_TYPE=Release -DENABLE_GLSLANG_BINARIES=OFF >/dev/null
+      -DCMAKE_BUILD_TYPE=Release -DENABLE_GLSLANG_BINARIES=OFF -DENABLE_OPT=0 >/dev/null
 cmake --build glslang/build -j 8 >/dev/null
 cmake --install glslang/build >/dev/null
 
