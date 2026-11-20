@@ -36,12 +36,15 @@
  * VirtualAlloc, the scalar typedefs -- from one place. On Windows this is a
  * passthrough to <windows.h>; off Windows the toolkit's shim supplies the same
  * names over pthreads and mmap, so the call sites below are written once. */
+#include "settings/settings.h"
 #include "win32_compat.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <chrono>
+#include <thread>
 
 #ifndef _WIN32
 #include <sys/mman.h>   /* mmap: the guest arena, see alloc_guest_vm */
@@ -192,6 +195,18 @@ extern "C" unsigned ppu_boot_frames_presented(void)
 
 static void present_guest_frame(void)
 {
+    using clock = std::chrono::steady_clock;
+    static int previous_cap;
+    static clock::time_point next_present{};
+    const int cap = pain_settings::frame_cap();
+    if (cap != previous_cap) {
+        next_present = {};
+        previous_cap = cap;
+    }
+    if (cap) {
+        std::this_thread::sleep_until(next_present);
+        next_present = clock::now() + std::chrono::nanoseconds(1'000'000'000 / cap);
+    }
     rsx_backend_present();
     /* This thread increments and guest threads read, so interlocked rather
      * than a volatile ++, which on arm64 is neither atomic nor a fence. */
@@ -419,7 +434,9 @@ int main(int argc, char** argv)
     setvbuf(stdout, NULL, _IONBF, 0);   /* unbuffered: do not lose prints on a kill */
 #endif
 
+    if (!pain_settings::load()) return 1;
     printf("=== ps3recomp game runner ===\n");
+    printf("[settings] Native Audio and Controller are under Extras or the pause menu.\n");
 
     if (!alloc_guest_vm()) {
         fprintf(stderr, "ERROR: could not allocate the guest address space\n");
@@ -444,6 +461,7 @@ int main(int argc, char** argv)
       cellGame_init_from_paramsfo(sfo_path); }
 
     ppu_recomp_register();   /* lifted function table -> address map */
+    pain_settings::install_native_hooks();
     ps3_load_prx_modules();  /* this game's lifted system PRX, if it has any */
     ppu_hle_init();          /* firmware import NID -> HLE handlers */
     ppu_sysprx_register();   /* boot-critical CRT */

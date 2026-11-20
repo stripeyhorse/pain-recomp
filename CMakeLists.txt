@@ -181,6 +181,11 @@ add_executable(${PROJECT_NAME}
     ${SPU_SOURCES}
 )
 
+target_sources(${PROJECT_NAME} PRIVATE
+    settings/settings.cpp
+    settings/native_menu.cpp
+)
+
 # The lifted SPU sources use bare #include "spu_context.h". Scope that include
 # directory (and their flags) to those TUs alone: adding it to the whole target
 # changes the compile command of every lifted PPU TU, and those are large enough
