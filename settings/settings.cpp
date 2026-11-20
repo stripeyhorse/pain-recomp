@@ -1,5 +1,9 @@
 #include "settings.h"
 
+#if defined(__APPLE__)
+#include "rsx_metal_backend.h"
+#endif
+
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -8,6 +12,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <string_view>
 
@@ -15,7 +20,7 @@ namespace pain_settings {
 namespace {
 using namespace std::literals;
 
-enum class Kind { toggle, presence, inverted_toggle, number, cap, language, size, aa, aniso, aspect };
+enum class Kind { toggle, presence, inverted_toggle, number, post_scale, cap, language, size, aa, aniso, aspect };
 
 struct Option {
     std::string_view key;
@@ -30,8 +35,10 @@ constexpr std::array options{
     Option{"vsync", "PS3RECOMP_VSYNC", "on", Kind::toggle},
     Option{"frame_cap", "PAIN_FRAME_CAP", "0", Kind::cap},
     Option{"fullscreen", "PS3RECOMP_FULLSCREEN", "off", Kind::toggle},
+    Option{"fullscreen_size", "PS3RECOMP_FULLSCREEN_SIZE", "auto", Kind::size},
     Option{"window_size", "PS3RECOMP_WINDOW_SIZE", "auto", Kind::size},
     Option{"aspect", "PS3RECOMP_ASPECT", "fit", Kind::aspect},
+    Option{"post_scale", "PS3_POST_SCALE", "100", Kind::post_scale},
     Option{"aa", "PS3_AA", "off", Kind::aa},
     Option{"vibrance", "PS3_VIBRANCE", "0", Kind::number, -1, 1},
     Option{"contrast", "PS3_CONTRAST", "1", Kind::number, .5, 1.5},
@@ -46,6 +53,8 @@ constexpr std::array options{
     Option{"unlock_trainer", "PAIN_UNLOCK_ALL", "off", Kind::toggle},
 };
 
+std::mutex settings_mutex;
+std::array<std::string, options.size()> values;
 std::atomic<int> cap;
 bool trace;
 std::filesystem::path settings_path;
@@ -88,6 +97,8 @@ bool normalize(const Option& option, std::string& value)
         const double real = std::strtod(value.c_str(), &end);
         return end != value.c_str() && *end == '\0' && real >= option.minimum && real <= option.maximum;
     }
+    case Kind::post_scale:
+        return parse_number(value, integer) && integer >= 50 && integer <= 200;
     case Kind::cap:
         return parse_number(value, integer) && (integer == 0 || integer == 20 || integer == 30 || integer == 60);
     case Kind::aniso:
@@ -119,6 +130,9 @@ const char* inherited(const Option& option)
     if (const auto* value = std::getenv(option.env)) return value;
     if (option.key == "window_size") return std::getenv("PS3RECOMP_METAL_WINDOW");
     if (option.key == "fullscreen") return std::getenv("PS3RECOMP_VK_FULLSCREEN");
+#ifdef _WIN32
+    if (option.key == "vsync") return std::getenv("D3D12_VSYNC");
+#endif
     return nullptr;
 }
 
@@ -222,19 +236,41 @@ bool load()
             parse_number(value, parsed);
             cap.store(parsed, std::memory_order_relaxed);
         }
+        values[i] = value;
         if (trace) {
             const auto* applied = std::getenv(option.env);
             std::fprintf(stderr, "[settings] %s=%s (%s) -> %s=%s\n", option.key.data(), value.c_str(),
                          source, option.env, applied ? applied : "<unset>");
         }
     }
+#if defined(__APPLE__)
+    if (!publish("PS3RECOMP_WINDOW_PIXELS", "1")) return false;
+#endif
     return true;
 }
 
 int frame_cap() { return cap.load(std::memory_order_relaxed); }
 
-bool save_frame_cap(int value)
+static std::string_view resolved_value(std::string_view key)
 {
+    for (size_t i = 0; i < options.size(); ++i)
+        if (key == options[i].key) return values[i];
+    return {};
+}
+
+std::string value(std::string_view key)
+{
+    std::lock_guard lock(settings_mutex);
+    return std::string(resolved_value(key));
+}
+
+bool save(std::string_view key, std::string setting)
+{
+    std::lock_guard lock(settings_mutex);
+    size_t index = 0;
+    while (index < options.size() && key != options[index].key) ++index;
+    if (index == options.size() || !normalize(options[index], setting)) return false;
+
     std::string contents;
     std::error_code error;
     if (std::filesystem::exists(settings_path, error)) {
@@ -252,6 +288,7 @@ bool save_frame_cap(int value)
     // Replace the last matching key while preserving the rest of the file.
     size_t value_offset = std::string::npos;
     size_t value_size = 0;
+    size_t insert_offset = 0;
     const std::string_view original = contents;
     bool settings_section = true;
     for (size_t start = 0; start < original.size();) {
@@ -262,24 +299,25 @@ bool save_frame_cap(int value)
         if (text.starts_with('[') && text.ends_with(']')) {
             settings_section = lower(trim(text.substr(1, text.size() - 2))) == "settings";
         } else if (settings_section && equals != text.npos &&
-                   lower(trim(text.substr(0, equals))) == "frame_cap") {
+                   lower(trim(text.substr(0, equals))) == key) {
             const auto tail = text.substr(equals + 1);
-            const auto setting = trim(tail);
-            value_offset = static_cast<size_t>(tail.data() - original.data());
-            value_size = tail.size();
-            if (!setting.empty()) {
-                value_offset = static_cast<size_t>(setting.data() - original.data());
-                value_size = setting.size();
-            }
+            const auto existing_value = trim(tail);
+            value_offset = static_cast<size_t>((existing_value.empty() ? tail.data() : existing_value.data()) -
+                                               original.data());
+            value_size = existing_value.size();
         }
         start = next == original.npos ? original.size() : next + 1;
+        if (settings_section) insert_offset = start;
     }
 
-    const auto rate = std::to_string(value);
-    if (value_offset != original.npos) contents.replace(value_offset, value_size, rate);
-    else {
-        if (!contents.empty() && contents.back() != '\n') contents += '\n';
-        contents += "\n[settings]\nframe_cap = " + rate + '\n';
+    if (value_offset != original.npos) {
+        contents.replace(value_offset, value_size, setting);
+    } else {
+        std::string line;
+        if (insert_offset && contents[insert_offset - 1] != '\n') line += '\n';
+        if (!insert_offset) line += "[settings]\n";
+        line += std::string(key) + " = " + setting + '\n';
+        contents.insert(insert_offset, line);
     }
 
     auto temporary = settings_path;
@@ -298,9 +336,31 @@ bool save_frame_cap(int value)
         std::filesystem::remove(temporary, ignored);
         return false;
     }
-    cap.store(value, std::memory_order_relaxed);
-    std::fprintf(stderr, "[settings/native] Sync Rate saved frame_cap=%d\n", value);
+    values[index] = setting;
+    if (options[index].kind == Kind::cap) {
+        int parsed{};
+        parse_number(setting, parsed);
+        cap.store(parsed, std::memory_order_relaxed);
+    }
+#if defined(__APPLE__)
+    if (key == "aa" || key == "sharpen" || key == "vibrance" || key == "contrast" ||
+        key == "aspect" || key == "post_scale" || key == "vsync") {
+        const auto aa = resolved_value("aa");
+        const auto real = [](auto option) { return std::strtof(resolved_value(option).data(), nullptr); };
+        unsigned scale{};
+        parse_number(resolved_value("post_scale"), scale);
+        const rsx_metal_present_options post{
+            aa == "smaa" ? RSX_METAL_AA_SMAA : aa == "fxaa" ? RSX_METAL_AA_FXAA : RSX_METAL_AA_OFF,
+            real("sharpen"), real("vibrance"), real("contrast"), scale, resolved_value("aspect") == "stretch",
+            resolved_value("vsync") == "on",
+        };
+        rsx_metal_backend_set_present_options(&post);
+    }
+#endif
+    std::fprintf(stderr, "[settings/native] saved %.*s=%s\n", static_cast<int>(key.size()),
+                 key.data(), setting.c_str());
     return true;
 }
+bool save_frame_cap(int value) { return save("frame_cap", std::to_string(value)); }
 bool verbose() { return trace; }
 } // namespace pain_settings

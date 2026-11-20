@@ -66,11 +66,11 @@ endif()
 
 # Rename definitions only. Both direct calls and the registered function table
 # still use the original guest names, so each call goes through the port hook.
-set(pain_missing_wrappers 00011810 00132D24 001AEFB0 0026E360)
+set(pain_missing_wrappers 00011810 00132D24 001AEFB0 0024206C 0024487C)
 set(pain_missing_fallbacks 001461FC 0015C7F8)
 foreach(source IN LISTS RECOMP_SOURCES)
     file(STRINGS "${source}" definitions REGEX
-        "^void func_(00011810|00132D24|001AEFB0|0026E360|001461FC|0015C7F8)\\(ppu_context\\* ctx\\) [{]$")
+        "^void func_(00011810|00132D24|001AEFB0|0024206C|0024487C|001461FC|0015C7F8)\\(ppu_context\\* ctx\\) [{]$")
     if(NOT definitions)
         continue()
     endif()
