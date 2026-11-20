@@ -1,5 +1,19 @@
 # Pain (PS3, BCES00548) — native port log
 
+## Renderer + native Video settings (local, pending bobby verification)
+
+PAIN 61048ef: added menu rows now register in the game's LIVE navigation and
+selection tables -- Down lands on Sync Rate, Cross cycles the cap (30 -> 20)
+AND SAVES. A **Video/Display** page is reachable from Audio with window and
+fullscreen presets through 4K, plus an Image Quality page on Metal.
+Toolkit 9bb0420: a confirmed front/back stencil-state fix (the release trace
+showed the in-flight pipelines are particle effects while character/stencil
+programs predate the release -- a strong silhouette candidate, pending the
+matched Metal capture). Vulkan locally verified 1440p/4K windowed and a 4K
+fullscreen swapchain. **Post-process Scale is implemented; guest geometry
+renders at its original 720p** (true internal scale is documented as deeper
+draw-engine work, not faked). Local null + Vulkan builds pass.
+
 ## Consolidated verification (bobby): FreePlay PASS, two structural partials
 
 Downtown **FreePlay PASSED** in full: DLC character Daxter in the Downtown
