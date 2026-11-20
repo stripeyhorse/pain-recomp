@@ -5,7 +5,15 @@ The toolkit has a loader and window-system integration interface in
 `rsx_vulkan_platform_sdl.c`. The Prospero payload still uses the null RSX
 backend. The adapter below is an implementation stub for the console phase.
 
+Use toolkit commit `28c3e2d` for the Vulkan interface and `e26ec4b` for
+the optional POSIX PPU startup diagnostic.
+
 ## Seam map
+
+At the toolkit baseline `9df357a`, loader entry was
+`rsx_vulkan_backend.c:255`, SDL surface creation was at line 4033,
+swapchain creation at line 1825, and the acquire, blit and present path
+starts at line 1979.
 
 | Boundary | Linux implementation | Shared Vulkan backend |
 | --- | --- | --- |
@@ -68,3 +76,12 @@ Keep SDL2 available for pad and audio.
 4. Use the same frontend settings and capture points as the desktop
    baseline. Require repeatable recognisable frontend and in-level frames
    with real guest shaders and record flip rates against host vblank.
+
+## Desktop startup control
+
+Leave `PS3_PPU_START_DELAY` unset for the baseline. For a separate timing
+control on POSIX, set it to a comma-separated list of exact guest PPU thread
+names. Each match pauses for 10 ms before guest entry. Compare where the
+baseline and control first diverge, including install-gate progress and the
+menu milestone. The delay provides a timing perturbation. Creator
+publication remains timing-dependent.
