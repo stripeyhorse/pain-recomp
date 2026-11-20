@@ -1,0 +1,52 @@
+From afec2003864c3c7f6036a1245ca053ce141f1148 Mon Sep 17 00:00:00 2001
+From: stripeyhorse <stripeyhorse@local>
+Date: Fri, 20 Nov 2026 18:36:18 +1100
+Subject: [PATCH 2/5] spu_dispatch_mt: build on GCC -- guard the clang-only
+ musttail
+
+__attribute__((musttail)) errors on GCC, so a GCC build of a port with
+SPU workloads (which compiles this TU via the template's SPU glob)
+fails. Follow the generated spu_recomp.h pattern: guaranteed tail call
+on clang, plain call+return elsewhere, where GCC's sibling-call
+optimization applies to this exact shape.
+---
+ runtime/spu/spu_dispatch_mt.c | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/runtime/spu/spu_dispatch_mt.c b/runtime/spu/spu_dispatch_mt.c
+index d9f86bb..51d24eb 100644
+--- a/runtime/spu/spu_dispatch_mt.c
++++ b/runtime/spu/spu_dispatch_mt.c
+@@ -21,6 +21,17 @@ typedef void (*spu_dispatch_fn)(spu_context*);
+ spu_dispatch_fn spu_lookup(uint32_t addr, int image_id);  /* spu_channels.c (exported) */
+ void spu_indirect_branch(spu_context* ctx);               /* full resolver in the lib */
+ 
++/* musttail is a clang attribute; GCC errors on it. Same guard the lifter's
++ * generated spu_recomp.h uses (SPU_TAILCALL). On non-clang the plain
++ * call+return relies on the compiler's sibling-call optimization, which GCC
++ * applies to this exact shape (single call, immediate return, void, shared
++ * signature). */
++#if defined(__clang__)
++#  define SPU_MT_TAILCALL(call) __attribute__((musttail)) return call
++#else
++#  define SPU_MT_TAILCALL(call) do { call; return; } while (0)
++#endif
++
+ void spu_indirect_branch_mt(spu_context* ctx)
+ {
+     uint32_t pc = ctx->pc & SPU_LS_MASK;
+@@ -62,9 +73,9 @@ void spu_indirect_branch_mt(spu_context* ctx)
+         if (!fn) fn = spu_lookup(pc, ctx->image_id);
+         if (fn) {
+             ctx->pc = pc;
+-            __attribute__((musttail)) return fn(ctx);
++            SPU_MT_TAILCALL(fn(ctx));
+         }
+     }
+     /* slow / special path: full resolver (diagnostics, intercepts, miss log) */
+-    __attribute__((musttail)) return spu_indirect_branch(ctx);
++    SPU_MT_TAILCALL(spu_indirect_branch(ctx));
+ }
+-- 
+2.47.3
+

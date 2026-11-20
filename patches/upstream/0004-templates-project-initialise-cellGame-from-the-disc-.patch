@@ -1,0 +1,65 @@
+From 8aada63d6d9a7d94d6d399a019da5e606e3d1e94 Mon Sep 17 00:00:00 2001
+From: stripeyhorse <stripeyhorse@local>
+Date: Fri, 20 Nov 2026 18:38:00 +1100
+Subject: [PATCH 4/5] templates/project: initialise cellGame from the disc
+ PARAM.SFO at boot
+
+The scaffold answered cellGame's BootCheck / GetParamString with a
+placeholder title ID unless the port wired up cellGame_init_from_paramsfo
+itself -- and a title whose SKU selection, game-data paths or install
+gate read its identity through cellGame then took a wrong branch from
+the first query. Symptom seen on a retail port: the title decided its
+disc copy needed a first-boot install, aimed the installer at the disc
+mount, and spun forever in its SPURS install pipeline.
+
+Search the usual SFO layouts off the derived VFS root (disc root,
+USRDIR-derived root, game dir) and initialise before any guest code
+runs. Ports that need custom behaviour can still override.
+---
+ templates/project/main.cpp | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/templates/project/main.cpp b/templates/project/main.cpp
+index 6715ca9..5f4ac60 100644
+--- a/templates/project/main.cpp
++++ b/templates/project/main.cpp
+@@ -68,6 +68,7 @@ extern "C" {
+ uint32_t ppu_load_elf(const char* path);      /* ELF -> guest RAM, returns entry OPD */
+ void     ppu_recomp_register(void);           /* generated: lifted table -> address map */
+ void     ppu_hle_init(void);                  /* firmware import NID -> HLE handler */
++extern "C" void cellGame_init_from_paramsfo(const char* sfo_path); /* libs/system/cellGame.c */
+ void     ppu_sysprx_register(void);           /* boot-critical CRT (sys_initialize_tls, ...) */
+ void     ppu_fs_register(void);               /* cellFs over the real game directory */
+ void     lv2_init_syscalls(void);             /* the lv2 syscall table */
+@@ -434,6 +435,28 @@ int main(int argc, char** argv)
+     derive_vfs_root(argv[1]);
+     printf("[boot] VFS root: %s\n", ppu_vfs_root);
+ 
++    /* Initialise cellGame's title metadata from the disc's PARAM.SFO.
++     * Without this, cellGame answers BootCheck / GetParamString with a
++     * placeholder title ID, and a title whose SKU selection, game-data
++     * paths or install gate depend on its real identity takes the wrong
++     * path from the very first query. Tolerates all the usual layouts:
++     * a disc root (PS3_GAME/), a PSN game dir, or a USRDIR-derived root. */
++    { static const char* const kSfoLayouts[] = {
++          "%s/PS3_GAME/PARAM.SFO",   /* vfs root = disc root      */
++          "%s/../PARAM.SFO",         /* vfs root = .../USRDIR    */
++          "%s/PARAM.SFO",            /* vfs root = the game dir  */
++      };
++      char sfo[1100];
++      int found = 0;
++      for (size_t i = 0; i < sizeof kSfoLayouts / sizeof kSfoLayouts[0]; i++) {
++          snprintf(sfo, sizeof sfo, kSfoLayouts[i], ppu_vfs_root);
++          FILE* f = fopen(sfo, "rb");
++          if (f) { fclose(f); found = 1; break; }
++      }
++      if (!found)
++          snprintf(sfo, sizeof sfo, "%s/PS3_GAME/PARAM.SFO", ppu_vfs_root);
++      cellGame_init_from_paramsfo(sfo); }
++
+     ppu_recomp_register();   /* lifted function table -> address map */
+     ps3_load_prx_modules();  /* this game's lifted system PRX, if it has any */
+     ppu_hle_init();          /* firmware import NID -> HLE handlers */
+-- 
+2.47.3
+

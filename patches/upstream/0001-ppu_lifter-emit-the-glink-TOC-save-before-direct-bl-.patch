@@ -1,0 +1,56 @@
+From fbc8a47fa7fd42081657773cfde15637320d95f9 Mon Sep 17 00:00:00 2001
+From: stripeyhorse <stripeyhorse@local>
+Date: Fri, 20 Nov 2026 18:36:18 +1100
+Subject: [PATCH 1/5] ppu_lifter: emit the glink TOC save before direct bl
+ calls
+
+Some PS3 toolchains (SN Systems ProDG-era builds) restore r2 from the
+ABI-reserved slot after EVERY call: the caller does bl <plt> and then
+ld r2, 40(r1). On hardware the callee's glink/PLT stub performs the
+matching save (std r2, 40(r1)) before jumping; the lifted direct call
+bypasses that stub, so every such restore reads stale stack garbage.
+
+Titles with universal restores (50,988 sites in the bring-up title,
+~21% of all functions) then run with a zeroed or stale TOC: every
+TOC-relative load reads through a garbage base, which shows up as
+null-page access cascades deep inside static-init, far from the
+instruction that zeroed the register.
+
+Emit the save the glink stub would have made (one store to the reserved
+linkage slot) before every direct bl. The slot is ABI-reserved for
+exactly this purpose, so the store cannot affect correct code, and
+direct calls that are never followed by a restore merely write an
+unused slot.
+---
+ tools/ppu_lifter.py | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/tools/ppu_lifter.py b/tools/ppu_lifter.py
+index 464ff41..68d1cff 100644
+--- a/tools/ppu_lifter.py
++++ b/tools/ppu_lifter.py
+@@ -2130,10 +2130,17 @@ class PPULifter:
+                     return f"/* bl -> non-code 0x{tgt:08X} */;"
+                 func.calls.append(tgt)
+                 self.call_targets.add(tgt)
+-                # PPC `bl` sets LR = return address (next instr). Emit it so mflr
+-                # reads the correct value AND stack-saved LRs are real return
+-                # addresses -> reliable back-chain unwinding for diagnostics.
+-                return f"ctx->lr = 0x{insn.addr + 4:08X}; {self.prefix}func_{tgt:08X}(ctx); DRAIN_TRAMPOLINE(ctx);"
++                # PPC64 glink/PLT semantics: on real hardware a cross-module call
++                # goes through a glink stub that saves the caller's TOC into the
++                # ABI-reserved slot at sp+0x28 before swapping r2. The caller
++                # restores it afterwards with `ld r2, 40(r1)`. Some toolchains
++                # (this title's) emit that restore after EVERY bl. The lifted
++                # direct call bypasses the glink stub, so without this spill the
++                # caller's reload reads stale stack garbage and r2 dies (seen as
++                # r2=0 null-page cascades deep in static-init). Emit the save
++                # the stub would have made; the slot is reserved for exactly this.
++                return (f"vm_write64(ctx->gpr[1] + 0x28, ctx->gpr[2]); "
++                        f"ctx->lr = 0x{insn.addr + 4:08X}; {self.prefix}func_{tgt:08X}(ctx); DRAIN_TRAMPOLINE(ctx);")
+             except ValueError:
+                 return f"/* bl {target} */;"
+ 
+-- 
+2.47.3
+
