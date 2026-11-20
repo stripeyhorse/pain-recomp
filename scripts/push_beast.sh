@@ -14,7 +14,9 @@ if [[ ! "$target_dir" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
     exit 1
 fi
 
-remote_rsync="$(ssh -o BatchMode=yes beast "bash -s -- $target_dir" <<'REMOTE'
+# One shared SSH master: the hosts rate-limit fresh connections.
+ssh_opts=(-o BatchMode=yes -o ControlMaster=auto -o ControlPath=/tmp/cm-%r@%h:%p -o ControlPersist=2h)
+remote_rsync="$(ssh "${ssh_opts[@]}" beast "bash -s -- $target_dir" <<'REMOTE'
 set -euo pipefail
 root="$HOME/$1"
 shared_prefix="$HOME/pain-ps3/prefix"
@@ -32,7 +34,7 @@ REMOTE
 )"
 
 deploy_rsync() {
-    rsync -a --partial --info=stats1 -e 'ssh -o BatchMode=yes' \
+    rsync -a --partial --info=stats1 -e "ssh ${ssh_opts[*]}" \
         --rsync-path="$remote_rsync" \
         "$@"
 }

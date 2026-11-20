@@ -13,11 +13,53 @@ game-data dir, e.g. <PS3_HDD0_ROOT>/game/BCES00548), and the completion
 marker USRDIR/CacheFlags/CacheDone.flg ("Flag\0", 5 bytes) only after every
 entry is extracted and the byte accounting balances.
 
+A re-extraction removes the marker before it writes any payload, so an
+interrupted run never leaves a complete-looking cache behind.
+
 Usage: extract_cache.py <CacheDesc.dat> <CacheData.pak> <out_root>
+       extract_cache.py --verify <CacheDesc.dat> <out_root>
+           exits non-zero unless the marker and every manifest entry, at its
+           manifest size, are present.
 """
 import os
 import struct
 import sys
+
+
+def read_manifest(desc_path):
+    with open(desc_path, "rb") as f:
+        desc = f.read()
+    count, total = struct.unpack_from(">II", desc, 0)
+    if (len(desc) - 8) // 256 != count:
+        sys.exit(f"FATAL: manifest declares {count} records but holds {(len(desc) - 8) // 256}")
+    entries = []
+    for i in range(count):
+        off = 8 + i * 256
+        (size,) = struct.unpack_from(">I", desc, off)
+        name = desc[off + 4:off + 256].split(b"\0")[0].decode("utf-8", "replace").lstrip("/")
+        entries.append((name, size))
+    return total, entries
+
+
+def verify(desc_path, out_root):
+    _, entries = read_manifest(desc_path)
+    base = os.path.join(os.path.abspath(out_root), "USRDIR")
+    marker = os.path.join(base, "CacheFlags", "CacheDone.flg")
+    try:
+        with open(marker, "rb") as f:
+            if f.read() != b"Flag\0":
+                return "marker has unexpected contents"
+    except OSError:
+        return "marker missing"
+    for name, size in entries:
+        dest = os.path.normpath(os.path.join(base, name))
+        try:
+            actual = os.path.getsize(dest)
+        except OSError:
+            return f"missing {name}"
+        if actual != size:
+            return f"{name} is {actual} bytes, manifest says {size}"
+    return None
 
 
 def main(desc_path, pak_path, out_root):
@@ -34,6 +76,10 @@ def main(desc_path, pak_path, out_root):
 
     base = os.path.join(os.path.abspath(out_root), "USRDIR")
     os.makedirs(base, exist_ok=True)
+    try:
+        os.remove(os.path.join(base, "CacheFlags", "CacheDone.flg"))
+    except FileNotFoundError:
+        pass
 
     offset = 0
     off = 8
@@ -69,6 +115,12 @@ def main(desc_path, pak_path, out_root):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if len(sys.argv) == 4 and sys.argv[1] == "--verify":
+        problem = verify(sys.argv[2], sys.argv[3])
+        if problem:
+            sys.exit(f"HDD cache incomplete: {problem}")
+        print("HDD cache verified")
+    elif len(sys.argv) == 4:
+        main(sys.argv[1], sys.argv[2], sys.argv[3])
+    else:
         sys.exit(__doc__)
-    main(sys.argv[1], sys.argv[2], sys.argv[3])

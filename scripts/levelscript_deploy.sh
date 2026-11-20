@@ -29,6 +29,8 @@ check_deploy_inputs() {
             return 1
         fi
     done < "$deploy_port/recompiled/prepared/wrapped_sources.txt"
+    "${PYTHON3:-python3}" "$deploy_port/scripts/extract_cache.py" \
+        --verify "$deploy_game/USRDIR/CacheDesc.dat" "$deploy_hdd/game/BCES00548" || return
     "${PYTHON3:-python3}" "$deploy_port/scripts/prepare_levelscripts.py" \
         "$deploy_game/USRDIR" --check-full
 }
@@ -73,6 +75,12 @@ copy_deploy_inputs() {
         "$deploy_catalog/" "$destination/pain-recomp/prx/generated/full/"
     deploy_rsync --exclude=/USRDIR "$deploy_game/" "$destination/game/PS3_GAME/"
     deploy_rsync "$deploy_game/USRDIR/" "$destination/game/PS3_GAME/USRDIR/"
+    # Withdraw the target's marker before refreshing payloads, so an interrupted
+    # repeat copy cannot leave the old marker in front of a partial cache.
+    local empty
+    empty="$(mktemp -d)" || return
+    deploy_rsync --delete "$empty/" "$destination/hdd0/game/BCES00548/USRDIR/CacheFlags/"
+    rmdir "$empty"
     deploy_rsync --exclude=/CacheFlags/CacheDone.flg "$deploy_cache/" "$destination/hdd0/game/BCES00548/USRDIR/"
     deploy_rsync "$deploy_cache/CacheFlags/CacheDone.flg" "$destination/hdd0/game/BCES00548/USRDIR/CacheFlags/"
     if [[ -f "$deploy_game/../PS3_DISC.SFB" ]]; then

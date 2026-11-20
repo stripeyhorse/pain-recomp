@@ -64,12 +64,13 @@ fi
 
 install_root="$hdd_root/game/BCES00548"
 marker="$install_root/USRDIR/CacheFlags/CacheDone.flg"
-if [[ ! -s "$marker" ]]; then
+if [[ -s "$marker" ]] && "${PYTHON3:-python3}" "$here/scripts/extract_cache.py" \
+        --verify "$usrdir/CacheDesc.dat" "$install_root"; then
+    echo "HDD cache present"
+else
     echo "Extracting the HDD cache from the disc"
     "${PYTHON3:-python3}" "$here/scripts/extract_cache.py" \
         "$usrdir/CacheDesc.dat" "$usrdir/CacheData.pak" "$install_root"
-else
-    echo "HDD cache present"
 fi
 
 printf 'PREPARE_OK\n  EBOOT:  %s\n  HDD0:   %s\n' "$elf" "$hdd_root"
