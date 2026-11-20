@@ -96,6 +96,25 @@ in two environment-enabled processes. Both first airborne crops had zero
 exact silhouette-colour pixels (round 5 baseline 6,670), and Jarvis stayed
 textured through street contact. The sling band can still turn grey.
 
+## Silhouette round 8: byte-exact generation evidence; the gate is not the gate
+
+All six matrix elements for both jobs, eight generations, both stacks:
+**RPCS3 matched byte-for-byte in all eight**; the unpinned port matched the
+first two and differed in all six elements in each of the next six. Both
+stacks retire the preceding list BEFORE publishing its reference -- and five
+mismatched port prepasses began AFTER that reference, so a reference gate
+alone cannot fix them: the game's intended guarantee is something OTHER than
+the reference. Candidate: the WWS queue's slot ordering (round 5 measured slot
+80 fetched +61 ms after a kick, slot 2045 +1.734 s after the SAME kick). The
+sling band did not reproduce in the dedicated pinned run (intermittent;
+producer unverified). The FIFO fixture reproduced the skipped SET_REFERENCE
+0x2260 and the historical trace confirms the same mechanism (self-JUMP at
+GET=0x0032E950, recovery to PUT=0x00010068, reference stuck at 0x13E8);
+historical packet bytes not recovered. Same-binary A/B flights reconfirmed:
+pinned textured through street contact; unpinned 6,670 px at release.
+Suite green. The durable pin remains THE practical fix; the generic fix
+awaits the slot-ordering hypothesis (round 9).
+
 ## Silhouette round 7: DURABLE MITIGATION COMMITTED; A/B airtight
 
 The pose pin is now a durable opt-in in the NORMAL port build:
