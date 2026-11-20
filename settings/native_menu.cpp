@@ -28,7 +28,7 @@ void trace_audio_profile(ppu_context* ctx)
     // Call Pain's own profile lookup on the current guest thread and stack.
     // Keep the callback's return registers and original TOC intact.
     ppu_context lookup = *ctx;
-    double levels[3]{};
+    std::array<double, 3> levels{};
     for (size_t i = 0; i < 3; ++i) {
         lookup.gpr[2] = frontend_toc;
         lookup.gpr[3] = profile;
@@ -36,6 +36,11 @@ void trace_audio_profile(ppu_context* ctx)
         func_00132B84(&lookup);
         levels[i] = lookup.fpr[1];
     }
+    static thread_local std::array<double, 3> previous{};
+    static thread_local bool sampled;
+    if (sampled && previous == levels) return;
+    sampled = true;
+    previous = levels;
     std::fprintf(stderr, "[settings/native] Audio profile dialog=%.3f sfx=%.3f volume=%.3f\n",
                  levels[0], levels[1], levels[2]);
 }
