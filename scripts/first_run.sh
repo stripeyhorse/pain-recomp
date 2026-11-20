@@ -5,6 +5,7 @@
 set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
+"$HERE/scripts/prepare.sh" || exit 1
 ELF="$ROOT/game/Pain_BCES00548/Pain BCES00548/PS3_GAME/USRDIR/EBOOT.elf"
 export PS3_HDD0_ROOT="$ROOT/hdd0"
 T="${1:-60}"
