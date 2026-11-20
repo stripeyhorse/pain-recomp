@@ -133,6 +133,37 @@ null-call handler — symptom of the poisoned chain; revisit if it survives the 
 Local runtime diagnostics added (all upstreamable): r2 in null-page reports,
 `PPU_TOCWATCH` on POSIX, r2 in the `[CALL]` indirect-call trace.
 
+### Boot 2 (TOC fix): full boot → install flow → SPURS consumer stall
+
+Zero null-page events after the lifter fix. Boot: cellGame ContentPermit ✓,
+mount ✓, cellPad ✓, GCM reports ✓, all 548 ctor-walker entries ✓, SPURS
+workloads churn with the embedded policy module.
+
+**The game reaches its mandatory first-boot HDD install** ("Pain will install
+game data to the HDD", 1.01 GB CacheData.pak → cache). It read exactly 4×8 MB
+pak chunks (~32 MB, matching its frozen "ReadWait 34188" counter) and then
+stalled: the pak reader is a producer whose consumer never acks — no
+/dev_hdd0 file was ever opened by the writer thread. SPURS PM (wid 0/1)
+resolves and runs (image 201) but the install jobs never progress. One
+flaky assert in the game's own jobapi: joblist.cpp(157): 0 == ret (after
+WaitForWorkloadShutdown; did not reproduce under tracing).
+
+Failed opens are all EXPECTED misses: 14 hashed ad-asset files + 2 ad-spaces
+under `USRDIR/Ads/defaultDirectory/01/` (Pain's dynamic in-game ad system;
+content only ever existed on the dead ad server) and optional
+`autorun.txt`/`RunConfig.txt`. The ad writer's open-for-write onto the disc
+path is also tolerated by the game.
+
+**Open investigation (sol 6.2 xhigh)**: skip the install check via a title
+hack vs pre-seed the installed state (reference from an RPCS3 run — blocked
+on firmware PUP: Sony's CDN unreachable from this network; need the user's
+PS3UPDAT.PUP).
+
+The SPURS policy module (guest 0xB70B80, 12,160 B, FNV 0xAB4C8373E9204A03)
+is lifted at base 0xA00 (its first 4 words are executable `ila` magic no-ops;
+real prologue at +0x10) and registered by fingerprint in `spu/pm_reg.c`
+(image 201) — cellSpurs resolves it: `wid=0 PM resolved`.
+
 - [x] Dump acquired from Unraid, unzipped, retail structure verified (PARAM.SFO: PAIN, BCES00548, 01.00)
 - [x] EBOOT decrypted (RPCS3 CLI)
 - [x] Stage-1 PPU analysis: 25,475 functions / 418 imports / 31 libs

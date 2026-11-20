@@ -2,7 +2,7 @@
 # Push the toolkit, the port and the game files to bobby (the Apple Silicon Mac).
 # Run from this box. Idempotent; rsync only sends what changed.
 set -e
-HERE="$(cd "$(dirname "$0")/.." && pwd)"      # .../Pain PS3
+HERE="$(cd "$(dirname "$0")/../.." && pwd)"     # .../Pain PS3
 GAME="$HERE/game/Pain_BCES00548/Pain BCES00548"
 
 rsync -a --delete --exclude .git --exclude .venv --exclude build \
