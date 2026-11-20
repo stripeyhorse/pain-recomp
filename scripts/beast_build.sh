@@ -2,9 +2,10 @@
 # Run on beast after push_beast.sh. Use "deps" or "port" to run one stage.
 set -euo pipefail
 
-root="$HOME/pain-ps3"
-prefix="$root/prefix"
-venv="$root/.venv"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+deps_root="${PAIN_BEAST_DEPS_ROOT:-$root}"
+prefix="$deps_root/prefix"
+venv="$deps_root/.venv"
 jobs="${JOBS:-$(nproc)}"
 export PATH="$venv/bin:$prefix/usr/bin:$PATH"
 TIMEFORMAT='elapsed %3R s'
@@ -45,7 +46,7 @@ build_dependency() {
     git -C "$source" log -1 --format="$name %H"
     cmake -S "$source" -B "$source/build" -G Ninja \
         -DCMAKE_INSTALL_PREFIX="$prefix" -DCMAKE_INSTALL_LIBDIR=lib \
-        -DCMAKE_PREFIX_PATH="$prefix" -DCMAKE_BUILD_TYPE=Release "$@"
+        -DCMAKE_PREFIX_PATH="$prefix" -DCMAKE_BUILD_TYPE="${PAIN_BUILD_TYPE:-}" "$@"
     time cmake --build "$source/build" --parallel "$jobs"
     cmake --install "$source/build"
 }
@@ -71,7 +72,7 @@ build_port() {
     }
     cmake -S "$port" -B "$port/build" -G Ninja \
         -DPAIN_USE_PREPARED_PPU=ON -DPORT_SPU_INPUTS= \
-        -DCMAKE_PREFIX_PATH="$prefix" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="$prefix" -DCMAKE_BUILD_TYPE="${PAIN_BUILD_TYPE:-}" \
         -DPAIN_LEVELSCRIPT_DIR="$port/prx/generated/full" \
         -DPS3RECOMP_DIR="$root/ps3recomp" -DPS3RECOMP_RSX_VULKAN=ON \
         -DPS3RECOMP_VULKAN_INCLUDE_DIR="$prefix/include"

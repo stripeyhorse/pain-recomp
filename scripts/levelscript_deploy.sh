@@ -8,13 +8,13 @@ set_deploy_paths() {
 }
 
 check_deploy_inputs() {
-    local path chunk expected_hash actual_hash
-    for path in "$deploy_game/PARAM.SFO" "$deploy_game/USRDIR/EBOOT.elf" \
+    local input chunk expected_hash actual_hash
+    for input in "$deploy_game/PARAM.SFO" "$deploy_game/USRDIR/EBOOT.elf" \
         "$deploy_cache/CacheFlags/CacheDone.flg" "$deploy_catalog/catalog.inc" \
         "$deploy_port/recompiled/ppu_recomp.h" "$deploy_port/recompiled/ppu_hle_nids.cpp" \
         "$deploy_port/recompiled/prepared/wrapped_sources.txt" "$deploy_port/spu/pm_reg.c"; do
-        if [[ ! -s "$path" ]]; then
-            printf 'Missing %s. Prepare the build inputs on the workstation first.\n' "$path" >&2
+        if [[ ! -s "$input" ]]; then
+            printf 'Missing %s. Prepare the build inputs on the workstation first.\n' "$input" >&2
             return 1
         fi
     done
