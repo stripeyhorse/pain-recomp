@@ -13,6 +13,12 @@ null run wrote 76,668-byte ICON0 and 36,254-byte PIC1 files that matched the
 disc byte-for-byte, then wrote and reloaded the 131,072-byte SYS-DATA.
 The trainer applied the temporary tutorial flag after that reload.
 
+The isolated Beast build passed the same check on the GTX 1080 Ti with
+guest shader translation on. It passed the cache and consent gates,
+reached the native main menu and completed the fresh save. On restart it
+read the entire SYS-DATA and reached the menu with the trainer active.
+The Online predicate saw network state 2 and rejected the transition.
+
 The main menu registers `OnlinePlayAvailable` at the call site
 `0x143B3C`, bound to `0x150CE0`. It checks a runtime menu byte and calls
 `0x150C78`, which checks the network object's status byte and state.

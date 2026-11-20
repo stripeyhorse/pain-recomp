@@ -16,7 +16,7 @@ frame captures stay local.
   lesson after a hit. The LevelScript catalogue covers 90 distinct modules
   at 91 disc paths.
 - **Native Audio and Video controls.** Sync Rate is a selectable Audio row
-  in Extras and the pause menu. It cycles Variable, 20, 30 and 60 FPS and
+  in Extras and the pause menu. It offers Variable, 20, 30 and 60 FPS and
   persists in the INI. Video/Display offers window and fullscreen output
   presets through 4K. Metal's Image Quality page controls post-processing.
   Post-process Scale changes the scanout effects buffer. The game still
@@ -24,8 +24,8 @@ frame captures stay local.
   airborne character silhouette defect remains in the Metal verification.
 - **Profile saves.** The port supplies missing save artwork from the disc
   and lets the native autosave write ICON0, PIC1 and SYS-DATA. A fresh
-  Linux null-backend profile completed the save and reloaded on restart.
-  See [NOTES.md](NOTES.md) for the test results.
+  profile completed the save and reloaded on both Linux null and headless
+  Vulkan. See [NOTES.md](NOTES.md) for the test results.
 - **Offline trainer.** Set `PAIN_UNLOCK_ALL=1` or `unlock_trainer = on`
   in `settings.ini` for the session. It sets the live Crash Course
   completion stat and filters that temporary change out of the profile
