@@ -37,6 +37,22 @@ and the cache files. It produced the matching ELF and 8,044 cache files,
 then reused both on a second invocation.
 See [README.md](README.md) for the workstation and target commands.
 
+## PS5 Phase C console-independent prep: COMPLETE (2026-11-21)
+
+Vulkan platform seam (toolkit 28c3e2d + e26ec4b, port f7b6caa): Linux keeps
+SDL + dynamic Vulkan loading; the PS5 RADV adapter maps to the template's
+static resolver + VK_KHR_display (docs/PS5-VULKAN-ADAPTER.md, an honest
+implementation stub pending console validation). **Desktop regression:
+byte-identical** -- all 30 Vulkan frame dumps and the sampled X11 window match
+the baseline exactly, GCC + Clang workflows pass, the per-device probe
+verified presentation and offscreen fallback. Payload study: -O2 on generated
+PPU/LevelScript compiles both samples but costs 352 s vs 25 s per TU and
+larger objects -- the full optimized ELF defers to the beast recipe; the
+340 MB Phase A ELF has no DWARF and strips only 2.45%. Startup-ordering
+diagnostic: default-off, 10 ms delay on exact-name PPU workers; synthetic
+boots pass off and on; the SPURS host-slot handoff is already lock-ordered;
+the real-game 77 s menu replay on the changed build defers to beast.
+
 ## PS5 Phase A: COMPLETE (2026-11-21)
 
 **PainRecomp.elf for Prospero is linked and statically verified**: x86-64 ELF64
