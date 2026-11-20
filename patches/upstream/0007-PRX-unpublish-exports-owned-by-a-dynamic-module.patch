@@ -1,13 +1,16 @@
-From 5133463952e3cb43ddc4fd0b76921dd1f87855c3 Mon Sep 17 00:00:00 2001
+From 7f57024d106e5c095c1b08c8261a332b3277b39d Mon Sep 17 00:00:00 2001
 From: StripeyHorse <stripeyhorse@gmail.com>
-Date: Fri, 20 Nov 2026 19:24:37 +1100
-Subject: [PATCH] Fix PRX REL64 relocation and allow dynamic export removal
+Date: Fri, 20 Nov 2026 22:12:14 +1100
+Subject: [PATCH 07/12] PRX: unpublish exports owned by a dynamic module
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
+Clear an export only when it still points to the departing module. Publish the registry size and addresses atomically so lookups can run alongside a port’s serialised module changes.
 ---
  runtime/prx/prx_loader.c | 47 +++++++++++++++++++++++++++++++---------
  runtime/prx/prx_loader.h |  5 +++++
- tools/lift_prx.py        |  5 +++--
- 3 files changed, 45 insertions(+), 12 deletions(-)
+ 2 files changed, 42 insertions(+), 10 deletions(-)
 
 diff --git a/runtime/prx/prx_loader.c b/runtime/prx/prx_loader.c
 index 9cc3670..af8c8b6 100644
@@ -15,12 +18,12 @@ index 9cc3670..af8c8b6 100644
 +++ b/runtime/prx/prx_loader.c
 @@ -7,6 +7,7 @@
  #include "prx_loader.h"
-
+ 
  #include <stdio.h>
 +#include <stdatomic.h>
  #include <stdlib.h>
  #include <string.h>
-
+ 
 @@ -19,36 +20,62 @@ extern uint8_t* vm_base;
   * Flat NID -> guest-address table, filled as modules load. A handful of system
   * PRXs export a few hundred symbols total, so a linear array with linear lookup
@@ -31,7 +34,7 @@ index 9cc3670..af8c8b6 100644
  static prx_export_reg_entry s_export_reg[PRX_EXPORT_REG_CAP];
 -static uint32_t             s_export_reg_n = 0;
 +static _Atomic uint32_t     s_export_reg_n = 0;
-
+ 
  static void prx_export_register(uint32_t nid, uint32_t guest_addr)
  {
      /* Last writer wins if two modules export the same NID (matches the PS3
@@ -55,7 +58,7 @@ index 9cc3670..af8c8b6 100644
 +    } else
          fprintf(stderr, "[prx] export registry full, dropping NID 0x%08X\n", nid);
  }
-
+ 
  uint32_t prx_resolve_export(uint32_t nid)
  {
 -    for (uint32_t i = 0; i < s_export_reg_n; i++)
@@ -66,7 +69,7 @@ index 9cc3670..af8c8b6 100644
 +            return atomic_load_explicit(&s_export_reg[i].guest_addr, memory_order_acquire);
      return 0;
  }
-
+ 
 -uint32_t prx_export_registry_count(void) { return s_export_reg_n; }
 +uint32_t prx_export_registry_count(void)
 +{
@@ -91,7 +94,7 @@ index 9cc3670..af8c8b6 100644
 +        }
 +    }
 +}
-
+ 
  prx_load_result prx_load_module(const prx_module* m, prx_register_fn reg)
  {
 diff --git a/runtime/prx/prx_loader.h b/runtime/prx/prx_loader.h
@@ -101,7 +104,7 @@ index 0c19daa..67dc09f 100644
 @@ -111,6 +111,11 @@ uint8_t* prx_image_load_file(const char* path, uint32_t* out_size);
   */
  uint32_t prx_resolve_export(uint32_t nid);
-
+ 
 +/* Clear exports still owned by this module. A port serializes registry
 + * writers and keeps the image alive until in-flight guest calls have ended.
 + * Readers may resolve exports concurrently with publication or removal. */
@@ -109,20 +112,4 @@ index 0c19daa..67dc09f 100644
 +
  /* Number of exports currently registered (diagnostics/tests). */
  uint32_t prx_export_registry_count(void);
-
-diff --git a/tools/lift_prx.py b/tools/lift_prx.py
-index 9fca6d5..246e048 100644
---- a/tools/lift_prx.py
-+++ b/tools/lift_prx.py
-@@ -106,8 +106,9 @@ class Prx:
-             elif rtype == 6:      # ADDR16_HA
-                 img[target:target + 2] = struct.pack(
-                     ">H", ((value + 0x8000) >> 16) & 0xFFFF)
--            elif rtype == 44:     # REL64 (rare)
--                img[target:target + 8] = struct.pack(">Q", value & (2**64 - 1))
-+            elif rtype == 44:     # REL64: S + A - P
-+                displacement = value - (base + target)
-+                img[target:target + 8] = struct.pack(">Q", displacement & (2**64 - 1))
-             else:
-                 raise SystemExit(f"unhandled relocation type {rtype} "
-                                  f"(entry {i}) — extend lift_prx.py")
+ 

@@ -1,7 +1,7 @@
 From afec2003864c3c7f6036a1245ca053ce141f1148 Mon Sep 17 00:00:00 2001
 From: stripeyhorse <stripeyhorse@local>
 Date: Fri, 20 Nov 2026 18:36:18 +1100
-Subject: [PATCH 2/5] spu_dispatch_mt: build on GCC -- guard the clang-only
+Subject: [PATCH 02/12] spu_dispatch_mt: build on GCC -- guard the clang-only
  musttail
 
 __attribute__((musttail)) errors on GCC, so a GCC build of a port with
@@ -47,6 +47,3 @@ index d9f86bb..51d24eb 100644
 -    __attribute__((musttail)) return spu_indirect_branch(ctx);
 +    SPU_MT_TAILCALL(spu_indirect_branch(ctx));
  }
--- 
-2.47.3
-

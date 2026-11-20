@@ -1,0 +1,180 @@
+From eb676aaa0ec3a6f7a85806f7bd34671c5ecb6ee1 Mon Sep 17 00:00:00 2001
+From: StripeyHorse <stripeyhorse@gmail.com>
+Date: Fri, 20 Nov 2026 22:12:14 +1100
+Subject: [PATCH 08/12] RSX: configure window size, aspect and display sync
+
+Use shared environment settings for Metal and Vulkan startup presentation, preserving the existing Metal size setting as a fallback. Select Vulkan immediate presentation only when the driver exposes it.
+---
+ libs/video/rsx_metal_backend.m  | 23 ++++++++++++++-----
+ libs/video/rsx_vulkan_backend.c | 40 ++++++++++++++++++++++++++++-----
+ 2 files changed, 52 insertions(+), 11 deletions(-)
+
+diff --git a/libs/video/rsx_metal_backend.m b/libs/video/rsx_metal_backend.m
+index 0ba88a8..d2a15ee 100644
+--- a/libs/video/rsx_metal_backend.m
++++ b/libs/video/rsx_metal_backend.m
+@@ -92,6 +92,7 @@ static id<MTLTexture>      s_offscreen;  /* headless only   */
+ static id<MTLTexture>      s_depth;      /* depth + stencil, both surfaces  */
+ static NSWindow*           s_window;
+ static int                 s_headless;
++static int                 s_stretch;     /* present into the whole window */
+ static atomic_int          s_closed;
+ #if !TARGET_OS_IPHONE
+ static id                  s_window_close_observer;
+@@ -869,11 +870,13 @@ static int create_window_impl(const char* title)
+         [NSApp setMainMenu:bar];
+     }
+ 
+-    /* PS3RECOMP_METAL_WINDOW=<w>x<h>: initial content size in points (default: the game's size). */
++    /* PS3RECOMP_WINDOW_SIZE=<w>x<h>: initial content size in points.
++     * PS3RECOMP_METAL_WINDOW is the older name. */
+     NSRect frame = NSMakeRect(0, 0, (CGFloat)s_width, (CGFloat)s_height);
+     {
+         unsigned ww = 0, wh = 0;
+-        const char* ws = getenv("PS3RECOMP_METAL_WINDOW");
++        const char* ws = getenv("PS3RECOMP_WINDOW_SIZE");
++        if (!ws) ws = getenv("PS3RECOMP_METAL_WINDOW");
+         if (ws && sscanf(ws, "%ux%u", &ww, &wh) == 2 && ww >= 160 && wh >= 90 && ww <= 16384 && wh <= 16384)
+             frame.size = NSMakeSize((CGFloat)ww, (CGFloat)wh);
+     }
+@@ -903,6 +906,13 @@ static int create_window_impl(const char* title)
+     s_layer.device          = s_dev;
+     s_layer.pixelFormat     = MTLPixelFormatBGRA8Unorm;
+     s_layer.framebufferOnly = YES;
++    const char* vsync = getenv("PS3RECOMP_VSYNC");
++    const char* aspect = getenv("PS3RECOMP_ASPECT");
++    s_layer.displaySyncEnabled = !(vsync && !strcmp(vsync, "0"));
++    s_stretch = aspect && !strcmp(aspect, "stretch");
++    fprintf(stderr, "[RSX metal] window %.0fx%.0f points, vsync %s, aspect %s\n",
++            frame.size.width, frame.size.height, s_layer.displaySyncEnabled ? "on" : "off",
++            s_stretch ? "stretch" : "fit");
+     s_layer.drawableSize    = CGSizeMake((CGFloat)s_width, (CGFloat)s_height);
+ 
+     NSView* view = [s_window contentView];
+@@ -4435,17 +4445,18 @@ static void eng_blit_to_display(id<MTLCommandBuffer> cb, id<MTLTexture> src,
+     rp.colorAttachments[0].storeAction = MTLStoreActionStore;
+     id<MTLRenderCommandEncoder> e = [cb renderCommandEncoderWithDescriptor:rp];
+     if (!e) return;
+-    /* In the window the picture keeps its aspect ratio: fitted into the drawable and centred, black around it. The
+-     * headless and host-surface targets are the size the title asked for and are filled as before. */
++    /* The default window fit preserves aspect with black bars. Stretch
++     * covers the drawable, as do the fixed-size headless and host targets. */
+     const double dw = (double)[dst width], dh = (double)[dst height];
+     const double sw = (double)[src width], sh = (double)[src height];
+-    const int fill = s_headless || s_host;
++    const int fixed = s_headless || s_host;
++    const int fill = fixed || s_stretch;
+     const double fit = fmin(dw / sw, dh / sh);
+     const double vw = fill ? dw : floor(sw * fit + 0.5), vh = fill ? dh : floor(sh * fit + 0.5);
+     [e setViewport:(MTLViewport){floor((dw - vw) * 0.5), floor((dh - vh) * 0.5), vw, vh, 0.0, 1.0}];
+     [e setRenderPipelineState:s_eng_blit_pso];
+     [e setFragmentTexture:src atIndex:0];
+-    const int scaled = !fill && (vw != sw || vh != sh);   /* a resized window filters; 1:1 and the fixed targets stay point-sampled */
++    const int scaled = !fixed && (vw != sw || vh != sh);   /* a resized window filters; 1:1 and the fixed targets stay point-sampled */
+     [e setFragmentSamplerState:(scaled ? s_default_sampler : s_eng_point_sampler) atIndex:0];
+     /* The video out's gamma (cellVideoOutSetGamma, the title's brightness
+      * setting): out = in^gamma, as RPCS3's calibration pass applies it. The
+diff --git a/libs/video/rsx_vulkan_backend.c b/libs/video/rsx_vulkan_backend.c
+index f78c66f..7939e49 100644
+--- a/libs/video/rsx_vulkan_backend.c
++++ b/libs/video/rsx_vulkan_backend.c
+@@ -106,7 +106,8 @@
+  * headless run never depends on a driver that can present. */
+ #define VK_WSI_INSTANCE_FNS(X) \
+     X(vkDestroySurfaceKHR) X(vkGetPhysicalDeviceSurfaceSupportKHR) \
+-    X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) X(vkGetPhysicalDeviceSurfaceFormatsKHR)
++    X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) X(vkGetPhysicalDeviceSurfaceFormatsKHR) \
++    X(vkGetPhysicalDeviceSurfacePresentModesKHR)
+ #define VK_WSI_DEVICE_FNS(X) \
+     X(vkCreateSwapchainKHR) X(vkDestroySwapchainKHR) X(vkGetSwapchainImagesKHR) \
+     X(vkAcquireNextImageKHR) X(vkQueuePresentKHR)
+@@ -218,6 +219,7 @@ typedef struct vk_state {
+     int              indep_blend_ok;  /* independentBlend: per-target MRT state */
+     u32              max_dim;         /* maxImageDimension2D of the device  */
+     int              windowed;
++    int              stretch, no_vsync;
+     SDL_Window*      window;
+     const char*      inst_exts[16];
+     u32              inst_ext_count;
+@@ -1746,18 +1748,30 @@ static void vk_window_drop(const char* why)
+ static void vk_window_open(const char* title)
+ {
+     if (!vk_env_on("PS3RECOMP_VK_WINDOW")) return;
++    const char* aspect = getenv("PS3RECOMP_ASPECT");
++    s_vk.stretch = aspect && !strcmp(aspect, "stretch");
++    const char* vsync = getenv("PS3RECOMP_VSYNC");
++    s_vk.no_vsync = vsync && !strcmp(vsync, "0");
+     if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
+         VK_LOG("window disabled, continuing headless: SDL video init failed: %s\n", SDL_GetError());
+         return;
+     }
+     /* Resizable and maximizable; F11 or Alt+Enter switches to borderless fullscreen and back. The frame keeps its
+      * aspect ratio inside whatever size the window has (vk_window_fit). */
++    const char* size = getenv("PS3RECOMP_WINDOW_SIZE");
++    unsigned width = s_vk.width, height = s_vk.height;
++    unsigned w, h;
++    if (size && sscanf(size, "%ux%u", &w, &h) == 2 &&
++        w >= 160 && h >= 90 && w <= 16384 && h <= 16384) {
++        width = w;
++        height = h;
++    }
+     Uint32 flags = SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
+     /* PS3RECOMP_FULLSCREEN=1 (--fullscreen), the same for every backend; PS3RECOMP_VK_FULLSCREEN is the older name. */
+     if (vk_env_on("PS3RECOMP_FULLSCREEN") || vk_env_on("PS3RECOMP_VK_FULLSCREEN")) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+     s_vk.window = SDL_CreateWindow(title && title[0] ? title : "ps3recomp",
+                                    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+-                                   (int)s_vk.width, (int)s_vk.height, flags);
++                                   (int)width, (int)height, flags);
+     s_vk.windowed = 1;          /* so vk_window_drop also shuts SDL video down */
+     if (!s_vk.window) {
+         char why[256];
+@@ -1840,6 +1854,19 @@ static int vk_create_swapchain(void)
+     for (size_t k = 0; k < 4; k++)
+         if (caps.supportedCompositeAlpha & alphas[k]) { alpha = alphas[k]; break; }
+ 
++    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
++    if (s_vk.no_vsync) {
++        VkPresentModeKHR modes[16];
++        u32 n = sizeof modes / sizeof modes[0];
++        const VkResult result = pvkGetPhysicalDeviceSurfacePresentModesKHR(s_vk.phys, s_vk.surface, &n, modes);
++        if (result == VK_SUCCESS || result == VK_INCOMPLETE) {
++            for (u32 i = 0; i < n; ++i)
++                if (modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) present_mode = modes[i];
++        }
++        if (present_mode == VK_PRESENT_MODE_FIFO_KHR)
++            VK_LOG("vsync off requested, IMMEDIATE unavailable; using FIFO\n");
++    }
++
+     VkSwapchainKHR old = s_vk.swapchain;
+     VkSwapchainCreateInfoKHR sci = {
+         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+@@ -1849,7 +1876,7 @@ static int vk_create_swapchain(void)
+         .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+         .preTransform = caps.currentTransform, .compositeAlpha = alpha,
+-        .presentMode = VK_PRESENT_MODE_FIFO_KHR,   /* the one mode every driver has */
++        .presentMode = present_mode,
+         .clipped = VK_TRUE, .oldSwapchain = old,
+     };
+     VkSwapchainKHR sc = VK_NULL_HANDLE;
+@@ -1875,7 +1902,10 @@ static int vk_create_swapchain(void)
+ 
+     s_vk.sc_extent = ext;
+     s_vk.sc_count = n;
+-    VK_LOG("window swapchain %ux%u, %u images, format %d\n", ext.width, ext.height, n, (int)fmt.format);
++    VK_LOG("window swapchain %ux%u, %u images, format %d, present %s, aspect %s\n",
++           ext.width, ext.height, n, (int)fmt.format,
++           present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "IMMEDIATE" : "FIFO",
++           s_vk.stretch ? "stretch" : "fit");
+     return 0;
+ }
+ 
+@@ -1909,7 +1939,7 @@ static vk_rect vk_window_fit(void)
+ {
+     const u32 dw = s_vk.sc_extent.width, dh = s_vk.sc_extent.height;
+     vk_rect r = { 0, 0, dw, dh };
+-    if (!s_vk.width || !s_vk.height) return r;
++    if (!s_vk.width || !s_vk.height || s_vk.stretch) return r;
+     if ((u64)dw * s_vk.height > (u64)dh * s_vk.width) {
+         r.w = (u32)(((u64)dh * s_vk.width + s_vk.height / 2) / s_vk.height);
+         r.x = (dw - r.w) / 2;

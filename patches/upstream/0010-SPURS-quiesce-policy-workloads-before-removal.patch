@@ -1,8 +1,9 @@
-From 162d29bb837d55720e08466ae45e55dfdcc9aee5 Mon Sep 17 00:00:00 2001
+From 8f743193d0acbb3eed5de4d353448302943be073 Mon Sep 17 00:00:00 2001
 From: StripeyHorse <stripeyhorse@gmail.com>
-Date: Fri, 20 Nov 2026 19:45:00 +1100
-Subject: [PATCH] Quiesce SPURS policy workloads before removal
+Date: Fri, 20 Nov 2026 22:12:15 +1100
+Subject: [PATCH 10/12] SPURS: quiesce policy workloads before removal
 
+Stop scheduling a shutting-down workload, wake waiters when its last lane finishes, and preserve the workload API error domain. Cover shutdown, wait and removal in the scheduler test.
 ---
  libs/spurs/cellSpurs.c       | 67 ++++++++++++++++++++++++++++--------
  tests/test_spurs_scheduler.c | 11 ++++--
@@ -15,7 +16,7 @@ index b09220e..228e74d 100644
 @@ -585,6 +585,15 @@ static void spurs_api_unlock(struct SpursInst* si)
      ReleaseSRWLockExclusive(&si->lock);
  }
-
+ 
 +/* Workload APIs return policy-module errors, whose low byte agrees with
 + * the core errors used by the shared instance lock. */
 +static s32 workload_error(s32 core_error)
@@ -27,7 +28,7 @@ index b09220e..228e74d 100644
 +
  static DWORD WINAPI spurs_kernel_thread(LPVOID p);
  static int spurs_guest_range_valid(u32 ea, u32 bytes);
-
+ 
 @@ -1601,14 +1610,14 @@ s32 cellSpursAddWorkload(CellSpurs* spurs, CellSpursWorkloadId* wid,
                           u32 maxContention)
  {
@@ -43,19 +44,19 @@ index b09220e..228e74d 100644
 -    if (lock_rc) return lock_rc;
 +    if (lock_rc) return workload_error(lock_rc);
      const u8* priority_h = GUEST_PTR(priority, const u8*);
-
-
+ 
+ 
 @@ -1665,7 +1674,7 @@ s32 cellSpursAddWorkload(CellSpurs* spurs, CellSpursWorkloadId* wid,
      }
-
+ 
      spurs_api_unlock(si);
 -    return CELL_SPURS_CORE_ERROR_NOMEM;
 +    return workload_error(CELL_SPURS_CORE_ERROR_NOMEM);
  }
-
+ 
  /* Real (BE) CellSpursWorkloadAttribute offsets (libspurs layout; the game's
 @@ -1864,20 +1873,20 @@ s32 cellSpursWorkloadAttributeSetName(u64 attr_ea, u64 nameClass_ea, u64 nameIns
-
+ 
  s32 cellSpursRemoveWorkload(CellSpurs* spurs, CellSpursWorkloadId wid)
  {
 -    if (!spurs) return CELL_SPURS_CORE_ERROR_NULL_POINTER;
@@ -70,7 +71,7 @@ index b09220e..228e74d 100644
 -        spurs_api_unlock(si); return CELL_SPURS_CORE_ERROR_SRCH;
 +        spurs_api_unlock(si); return workload_error(CELL_SPURS_CORE_ERROR_SRCH);
      }
-
+ 
      if (si->active[wid] || spurs_policy_release_workload(si->ea, wid)) {
 -        spurs_api_unlock(si); return CELL_SPURS_CORE_ERROR_BUSY;
 +        spurs_api_unlock(si); return workload_error(CELL_SPURS_CORE_ERROR_BUSY);
@@ -92,7 +93,7 @@ index b09220e..228e74d 100644
          wkl_count_set(slot->ea, SPURS_WKL_CURCONT, wid, si->is2, si->active[wid]);
          ef_line_end(slot->ea);
 @@ -3486,16 +3498,43 @@ s32 cellSpursGetWorkloadInfo(u64 spurs_ea, u32 wid, u64 info_ea)
-
+ 
  s32 cellSpursShutdownWorkload(u64 spurs_ea, u32 wid)
  {
 -    static int _n = 0;
@@ -112,7 +113,7 @@ index b09220e..228e74d 100644
 +    spurs_api_unlock(si);
      return CELL_OK;
  }
-
+ 
  s32 cellSpursWaitForWorkloadShutdown(u64 spurs_ea, u32 wid)
  {
 -    static int _n = 0;
@@ -138,7 +139,7 @@ index b09220e..228e74d 100644
 +    ReleaseSRWLockExclusive(&si->lock);
 +    return stopped ? CELL_OK : workload_error(CELL_SPURS_CORE_ERROR_STAT);
  }
-
+ 
  /* =========================================================================
 diff --git a/tests/test_spurs_scheduler.c b/tests/test_spurs_scheduler.c
 index 4fec4b0..0588211 100644
@@ -164,7 +165,7 @@ index 4fec4b0..0588211 100644
 +    assert((u32)cellSpursWaitForWorkloadShutdown(0x1000,0)==0x80410805);
      for(unsigned i=0;i<4;i++)wait_for(&done[i],1,"release and next admission");
      finalize(0x1000);puts("SPURS configured capacity / maxContention / stable physical slots / reinit PASS");
-
+ 
 @@ -199,7 +206,7 @@ int main(void)
          wait_for(&incarnation_runs,incarnation+1,"same policy/data workload incarnation");
          for(unsigned i=0;;i++) {

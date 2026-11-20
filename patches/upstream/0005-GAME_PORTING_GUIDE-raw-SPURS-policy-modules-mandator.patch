@@ -1,7 +1,7 @@
 From c29989f21cb97e53cc833a41d3d355d23a6ac643 Mon Sep 17 00:00:00 2001
 From: stripeyhorse <stripeyhorse@local>
 Date: Fri, 20 Nov 2026 18:38:00 +1100
-Subject: [PATCH 5/5] GAME_PORTING_GUIDE: raw SPURS policy modules;
+Subject: [PATCH 05/12] GAME_PORTING_GUIDE: raw SPURS policy modules;
  mandatory-install pre-seed
 
 Two recipes earned during a retail port's bring-up:
@@ -109,6 +109,3 @@ index ad6685e..c5e47d8 100644
  ### Testing Checklist
  
  - [ ] Game starts without crashes
--- 
-2.47.3
-

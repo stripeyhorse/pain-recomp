@@ -1,7 +1,7 @@
 From fbc8a47fa7fd42081657773cfde15637320d95f9 Mon Sep 17 00:00:00 2001
 From: stripeyhorse <stripeyhorse@local>
 Date: Fri, 20 Nov 2026 18:36:18 +1100
-Subject: [PATCH 1/5] ppu_lifter: emit the glink TOC save before direct bl
+Subject: [PATCH 01/12] ppu_lifter: emit the glink TOC save before direct bl
  calls
 
 Some PS3 toolchains (SN Systems ProDG-era builds) restore r2 from the
@@ -51,6 +51,3 @@ index 464ff41..68d1cff 100644
              except ValueError:
                  return f"/* bl {target} */;"
  
--- 
-2.47.3
-

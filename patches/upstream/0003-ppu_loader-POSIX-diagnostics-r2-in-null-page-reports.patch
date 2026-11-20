@@ -1,8 +1,8 @@
 From f9e14fbca1188996c5185a37bc5b8082ab064fd5 Mon Sep 17 00:00:00 2001
 From: stripeyhorse <stripeyhorse@local>
 Date: Fri, 20 Nov 2026 18:36:18 +1100
-Subject: [PATCH 3/5] ppu_loader: POSIX diagnostics -- r2 in null-page reports
- and [CALL]; PPU_TOCWATCH off Windows
+Subject: [PATCH 03/12] ppu_loader: POSIX diagnostics -- r2 in null-page
+ reports and [CALL]; PPU_TOCWATCH off Windows
 
 A null-page report that names the touching function but not the live
 TOC hides the most common root cause of the whole cascade (a caller
@@ -71,6 +71,3 @@ index ea7de18..e5653e4 100644
                  (long long)(int32_t)ctx->gpr[5], (uint32_t)ctx->lr, _fromw,
                  (unsigned long long)ctx->thread_id);
          /* r28-r31 usually hold the caller's object pointers; for a virtual
--- 
-2.47.3
-

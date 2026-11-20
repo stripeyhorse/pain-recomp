@@ -1,0 +1,26 @@
+From 98ec9ba7a463ead6f8e685c91afc17daf18c25be Mon Sep 17 00:00:00 2001
+From: StripeyHorse <stripeyhorse@gmail.com>
+Date: Fri, 20 Nov 2026 22:12:14 +1100
+Subject: [PATCH 06/12] PRX: apply REL64 relative to the relocation place
+
+Encode S + A - P for a 64-bit PC-relative relocation. Writing the absolute target instead corrupts relative pointers and makes the lifted image depend on its assigned base.
+---
+ tools/lift_prx.py | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/tools/lift_prx.py b/tools/lift_prx.py
+index 9fca6d5..246e048 100644
+--- a/tools/lift_prx.py
++++ b/tools/lift_prx.py
+@@ -106,8 +106,9 @@ class Prx:
+             elif rtype == 6:      # ADDR16_HA
+                 img[target:target + 2] = struct.pack(
+                     ">H", ((value + 0x8000) >> 16) & 0xFFFF)
+-            elif rtype == 44:     # REL64 (rare)
+-                img[target:target + 8] = struct.pack(">Q", value & (2**64 - 1))
++            elif rtype == 44:     # REL64: S + A - P
++                displacement = value - (base + target)
++                img[target:target + 8] = struct.pack(">Q", displacement & (2**64 - 1))
+             else:
+                 raise SystemExit(f"unhandled relocation type {rtype} "
+                                  f"(entry {i}) — extend lift_prx.py")

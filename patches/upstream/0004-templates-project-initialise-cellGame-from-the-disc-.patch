@@ -1,7 +1,7 @@
 From 8aada63d6d9a7d94d6d399a019da5e606e3d1e94 Mon Sep 17 00:00:00 2001
 From: stripeyhorse <stripeyhorse@local>
 Date: Fri, 20 Nov 2026 18:38:00 +1100
-Subject: [PATCH 4/5] templates/project: initialise cellGame from the disc
+Subject: [PATCH 04/12] templates/project: initialise cellGame from the disc
  PARAM.SFO at boot
 
 The scaffold answered cellGame's BootCheck / GetParamString with a
@@ -60,6 +60,3 @@ index 6715ca9..5f4ac60 100644
      ppu_recomp_register();   /* lifted function table -> address map */
      ps3_load_prx_modules();  /* this game's lifted system PRX, if it has any */
      ppu_hle_init();          /* firmware import NID -> HLE handlers */
--- 
-2.47.3
-

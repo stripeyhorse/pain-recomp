@@ -1,8 +1,10 @@
-From 14d6e2deb9ac618c6daca387fa9bb0f3e73ff017 Mon Sep 17 00:00:00 2001
+From bd276270488d6cbdc3b911c9ea395e8a664450c2 Mon Sep 17 00:00:00 2001
 From: StripeyHorse <stripeyhorse@gmail.com>
-Date: Fri, 20 Nov 2026 19:41:08 +1100
-Subject: [PATCH] Find jump tables spilled from a TOC-indirect load
+Date: Fri, 20 Nov 2026 22:12:14 +1100
+Subject: [PATCH 09/12] PPU: recover jump-table bases spilled from a
+ TOC-indirect load
 
+Follow the nearest TOC-relative definition through an indirect load and a stack spill. Exercise both a resolved table and an uninitialised parent with synthetic PowerPC instructions.
 ---
  tools/ppu_lifter.py          | 22 +++++++++++++++++++---
  tools/test_ppu_jumptables.py | 14 ++++++++++++++
@@ -55,8 +57,8 @@ index 64ed245..8c25703 100644
          return 1
 @@ -428,5 +429,18 @@ def test_spilled_base_reused_as_target():
      check("reload of a slot nothing stored is not a base", discover(words, mem), None)
-
-
+ 
+ 
 +def test_spilled_toc_indirect_base():
 +    """A table pointer loaded through a TOC global, then spilled to r1."""
 +    table, global_ea = 0x11000, 0x81000
