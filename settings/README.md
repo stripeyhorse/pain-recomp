@@ -27,8 +27,9 @@ updates the INI.
 | `metal_headless`, `metal_guest_programs` | on, off | Select Metal output and guest shader use. Shader translation needs the toolkit dependencies. |
 | `vulkan_window`, `vulkan_guest_programs` | on, off | Select Vulkan window output and guest shader use. Shader translation needs the toolkit dependencies. |
 | `unlock_trainer` | on, off | Sets `PAIN_UNLOCK_ALL` for the optional guarded lift. |
-| `pin_pose_at_kick` | on, off | Sets `PAIN_PIN_POSE_AT_KICK`. Pins the actor pose at the list kick for the prepass and material jobs. Defaults to off. |
-| `creator_first` | on, off | Sets `PS3_CREATOR_FIRST`. A new PPU thread at the creator's priority or lower starts after the creator's next blocking call, so the boot's GameContent and SysCacheCreate handshakes cannot lose their completion flag. Defaults to on. |
+| `pin_pose_at_kick` | on, off | Sets `PAIN_PIN_POSE_AT_KICK`. Pins the actor pose at the list kick for the prepass and material jobs, which keeps the player character textured in flight. Defaults to on. |
+| `creator_first` | on, off | Sets `PS3_CREATOR_FIRST`. A new PPU thread at the creator's priority or lower starts after the creator's next blocking call, so the boot's GameContent and SysCacheCreate handshakes keep their completion flag unless the creator stalls past the toolkit's cap (`PS3_CREATOR_FIRST_MS`, 2000 ms). Needs toolkit `d4b41e8` or later. Defaults to on. |
+| `fifo_park_grace_ms` | 0 to 60000 | Sets `GCM_PARK_GRACE_MS`. How long the RSX FIFO waits at a parked jump for the game to patch it before following `put`. The toolkit default of 50 ms can skip a fence when the host is busy and stall the game at a ring wrap. Defaults to 2000. |
 
 INI edits apply at startup. The window presentation settings require the
 toolkit change for Metal and Vulkan. The null backend has no graphics output.
