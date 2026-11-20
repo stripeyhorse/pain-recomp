@@ -42,15 +42,21 @@ void trace_audio_profile(ppu_context* ctx)
 
 void audio_menu(ppu_context* ctx)
 {
-    const auto event = ctx->gpr[4];
+    // Mirror the native save branch at 0x15435c / 0x154454 so diagnostics
+    // sample the profile after its setters run, without polling it per frame.
+    const auto input = static_cast<uint32_t>(ctx->gpr[6]);
+    const auto back = vm_read32(vm_read32(frontend_toc - 0x3758)) |
+                      vm_read32(vm_read32(frontend_toc - 0x375c));
+    const auto suppress_save = vm_read32(vm_read32(frontend_toc - 0x3770));
+    const bool saving = input && (vm_read32(input + 0x1b8) & back) &&
+                        !(vm_read32(input + 0x190) & suppress_save);
     static std::atomic_flag entered;
     if (!entered.test_and_set()) {
         std::fprintf(stderr, "[settings/native] AudioMenuActive (001541b4)\n");
         trace_audio_profile(ctx);
     }
     func_001541B4(ctx);
-    // The native handler commits slider values to the profile on its exit path.
-    if (event == 0 && ctx->gpr[3] != 0) trace_audio_profile(ctx);
+    if (saving) trace_audio_profile(ctx);
 }
 
 uint32_t frontend_state()
