@@ -37,6 +37,34 @@ and the cache files. It produced the matching ELF and 8,044 cache files,
 then reused both on a second invocation.
 See [README.md](README.md) for the workstation and target commands.
 
+## PS5 Phase A: COMPLETE (2026-11-21)
+
+**PainRecomp.elf for Prospero is linked and statically verified**: x86-64 ELF64
+PIE, 356,400,776 bytes, three 16-KiB-aligned load segments matching the SDK
+sample, 10 console .sprx imports (libkernel_web.sprx, libSceLibcInternal.sprx
+among them), the separate 4 GiB + 64 KiB guest arena confirmed as R/W
+anonymous memory. The full lift is aboard (generated PPU + LevelScript at -O0
+to shorten the Phase A build -- optimisation is queued before Phase C).
+Toolkit commits: dd3b998 (MAP_NORESERVE optional), 3508a2d (running-thread
+suspension gated, suspended-start preserved), f96f65f (POSIX socket headers),
+9df357a (SPU profiling clock fallback). Port: 4779d89 (Prospero build config +
+README status).
+
+**Linux reference passed with a revealing finding**: default-scheduling boots
+STALLED before the install gate; briefly holding two startup workers in GDB
+let their creators publish state and the game reached the menu in 77 s -- a
+STARTUP ORDERING RACE (workers racing their creators), the same disease class
+the silhouette hunt is chasing on the SPU side. All seven changed Linux
+objects were instruction-identical before/after the portability fixes; six
+fiber/sync/SPU tests + 340 Win32-compat checks passed.
+
+**Phase B needs the user's provisioned console** (qualify its existing
+firmware with the plain SDK ELF + an unchanged RADV sample; probe the exact
+arena, raw-SPU windows and page protections; stage the disc tree + 8,044-file
+cache with digest checks; three cold runs past the install gate with sustained
+vblank/flip/FIFO and the null-backend pixel result). The full hand-off
+checklist is in the Obsidian vault and docs/PS5-PORT.md.
+
 ## Silhouette round 3: depth-clear RULED OUT; matrix-generation hazard prime
 
 Beast cleared Jarvis's depth surface to 1.0 before the prepass for 20
