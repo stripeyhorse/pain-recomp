@@ -57,8 +57,10 @@ actual console.
 
 1. **Share the RSX Vulkan backend with PS5 RADV** (community Mesa/RADV,
    statically linked, AGC submission + VideoOut via `VK_KHR_display`).
-   Replace only the loader/WSI seams; share the draw engine and SPIR-V
-   translation. Cross-build glslang; `PS3RECOMP_VK_GUEST_PROGRAMS=1`.
+   Replace only the loader/WSI seams. Share the draw engine and SPIR-V
+   translation. Cross-build glslang and set `PS3RECOMP_VK_GUEST_PROGRAMS=1`.
+   See [the RADV adapter plan](PS5-VULKAN-ADAPTER.md) for the platform
+   interface and console acceptance checks.
 2. Alternate community driver (`mpereiraesaa/ps5-vulkan`, Vulkan 1.3) as a
    fallback if RADV hits a reproducible blocker.
 3. PS5 OpenGL/EGL (BlackBearReloaded, experimental GL 4.6) — would need a

@@ -116,7 +116,11 @@ readelf -h -l -d build/ps5/PainRecomp.elf
 ```
 
 This configuration reduces build time for the lifted PPU and LevelScript
-sources. The payload takes the guest EBOOT as its first argument and uses
+sources. Add `-DPAIN_LIFTED_PPU_O2=ON` in a separate build directory to
+benchmark those sources at `-O2` with the same runtime flags. Use a bounded
+job count for the large generated translation units.
+
+The payload takes the guest EBOOT as its first argument and uses
 `PS3_VFS_ROOT` for the disc root and `PS3_HDD0_ROOT` for the writable cache
 root. See the [PS5 port plan](docs/PS5-PORT.md) for console acceptance criteria.
 

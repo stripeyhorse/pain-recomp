@@ -360,6 +360,15 @@ else()
         COMPILE_OPTIONS "-w;-ffp-contract=off")
 endif()
 
+option(PAIN_LIFTED_PPU_O2 "Build the lifted PPU and LevelScript sources at -O2" OFF)
+if(PAIN_LIFTED_PPU_O2)
+    if(MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        message(FATAL_ERROR "PAIN_LIFTED_PPU_O2 requires Clang or GCC with GNU-style flags")
+    endif()
+    set_property(SOURCE ${RECOMP_SOURCES} ${LEVELSCRIPT_SOURCES}
+        APPEND PROPERTY COMPILE_OPTIONS "-O2")
+endif()
+
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
