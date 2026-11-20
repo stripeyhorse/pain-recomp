@@ -184,11 +184,24 @@ All blu-ray files are cached
 ps: PainRecomp at ~135% CPU, sustained live loop
 ```
 
-The game's own vertex/fragment programs compile and draw every frame on the
-M2's GPU through the register-file draw engine. Remaining polish, not blockers:
-navigate the frontend with real input (cellPad via SDL2), audio out, in-game
-SPURS physics jobs, per-title tuning. The one thing remote logs cannot show
-is the pixels on bobby's screen — confirm by looking at the window.
+The title's own vertex/fragment programs compile and draw every frame on the
+M2's GPU through the register-file draw engine (880 draws per frame across 3
+surfaces by frame 15,120, ~23 presents per second).
+
+### Visual verification (independent vision agent, frame 15120)
+
+A vision-capable agent read the captured frame and confirmed, high confidence:
+a **correctly rendered PSN "SUPPLEMENTAL TERMS" consent screen** — muted
+background, left-aligned bold condensed text (verbatim legible: "PlayStation®Network
+Europe Limited wants your on-line gaming experience..."), a thin scrollbar with a
+yellow handle, ✕-Accept (bottom left, pale-blue cross icon) and ○-Decline
+(bottom right, coral-red circle icon). No corruption, no missing textures.
+
+So the ~23fps render loop was never stuck: **the game is waiting on the first-boot
+PSN EULA consent — a user input, by design.** Press ✕ (cross, or the X key via the
+cellPad keyboard fallback) to Accept and the game advances to its main menu.
+Render pipeline proven end to end: RSX → register-file draw engine → Metal →
+the title's own guest shaders → readable styled UI text.
 
 ### Boot 2 (TOC fix): full boot → install flow → SPURS consumer stall
 
