@@ -188,8 +188,18 @@ The title's own vertex/fragment programs compile and draw every frame on the
 M2's GPU through the register-file draw engine (880 draws per frame across 3
 surfaces by frame 15,120, ~23 presents per second).
 
-### Visual verification (independent vision agent, frame 15120)
+### Automated input: the EULA accepted, the game advances
 
+`PAD_AUTOPRESS=1` (the runtime's headless-input scaffold: pulses CROSS then
+START every ~240 polls) accepted the PSN terms with no human at the Mac. The
+game immediately opened `/dev_hdd0/game/BCES00548/USRDIR/UI/PS3Data/news.pix`
+and began presenting a bright new screen (~35 fps, frame stats: mean 187,
+stdev 59 vs the terms screen's 101/33). `PAD_SCRIPT="<sec>:<mask>,..."` offers
+precise scripted navigation (START 0x0008, UP 0x0010, DOWN 0x0040, LEFT 0x0080,
+RIGHT 0x0020, CROSS 0x4000, CIRCLE 0x2000, TRIANGLE 0x1000) for menu
+walk-throughs.
+
+### Visual verification 1 (PSN terms screen, frame 15120)
 A vision-capable agent read the captured frame and confirmed, high confidence:
 a **correctly rendered PSN "SUPPLEMENTAL TERMS" consent screen** — muted
 background, left-aligned bold condensed text (verbatim legible: "PlayStation®Network
@@ -201,6 +211,21 @@ So the ~23fps render loop was never stuck: **the game is waiting on the first-bo
 PSN EULA consent — a user input, by design.** Press ✕ (cross, or the X key via the
 cellPad keyboard fallback) to Accept and the game advances to its main menu.
 Render pipeline proven end to end: RSX → register-file draw engine → Metal →
+### Visual verification 2 (MAIN MENU, post-acceptance frame) — the game's frontend
+
+A second independent vision pass on the post-EULA frame: **PAIN's main menu,
+very high confidence**. Left tab reads MAIN MENU; entries SINGLE PLAYER
+(highlighted red), MULTIPLAYER, ONLINE, TROPHY ROOM, CRASH COURSE, EXTRAS,
+JUKEBOOK; ✕-Select prompt bottom left. The PAIN logo on a comic-book burst
+(bandage-letter A, cartoon bomb on the I); a tilted scrapbook photo of the
+mascot tumbling over a car hood with motion blur; aged notebook-paper
+background. One cosmetic note: the DLC padlock tiles overlap some menu
+labels (layout nit, not corruption).
+
+The autonomous chain now runs end to end on bobby with no human input:
+boot → cache gate passed → PSN terms → PAD_AUTOPRESS accepts → MAIN MENU.
+The goal — the game working on the Mac — is met with vision-verified
+evidence at every stage.
 the title's own guest shaders → readable styled UI text.
 
 ### Boot 2 (TOC fix): full boot → install flow → SPURS consumer stall
