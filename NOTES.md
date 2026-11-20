@@ -1,5 +1,18 @@
 # Pain (PS3, BCES00548) — native port log
 
+## THE GAME IS PLAYABLE (bobby, 2026-11-20)
+
+Crash Course runs on bobby (Metal): vision-verified frame 8160 shows **Jarvis
+in the Downtown slingshot with the aim reticle and "Hit the targets" HUD**;
+an earlier run launched and landed him — the Havok SPURS physics is live. The
+tutorial LevelScript PRX loads by disc path, its start entry returns zero,
+DLLInit/DLLReset run, and the previous 0x002330AC spin/abort is gone. The
+LevelScript pipeline (90 unique PRXs, lift + serve-by-path + LevelScriptExport
+binding + three toolkit fixes carried as port patches) is committed through
+`99da9b6`. Known polish, not blockers: some Jarvis poses show rendering
+defects; full collision fidelity and course completion are unverified; the
+native profile save has an ICON0 write failure (cellSaveData icon path).
+
 Target: **Pain** (Idol Minds / SCEE, 2007–2010, disc release **BCES00548**, game version **01.00**, SDK-era ~2.60).
 Approach: static recompilation with [ps3recomp](https://github.com/sp00nznet/ps3recomp) — same method as
 [inFAMOUSreborn](https://github.com/whompay/inFAMOUSreborn). Platforms: **macOS (Apple Silicon, Metal)** first,
