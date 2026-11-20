@@ -1,5 +1,21 @@
 # Pain (PS3, BCES00548) — native port log
 
+## Consolidated verification (bobby): FreePlay PASS, two structural partials
+
+Downtown **FreePlay PASSED** in full: DLC character Daxter in the Downtown
+slingshot with the score HUD, the FreePlay LevelScript linking 19 imports,
+starting (result=0), DLLInit/DLLReset. Trainer v2 wrote T_TUTORIAL=1 after
+AutoLoad: Single Player / Multiplayer / Trophy Room lost their padlocks and
+Single Player became enterable; stock relaunch restored all four locks and
+blocked entry (reversible). **Online kept its padlock** -- gated on something
+other than the tutorial flag (likely network state; queued for the QA pass).
+**Sync Rate partial**: the row renders in Extras/pause Audio, but menu
+NAVIGATION skips it (Down wraps Volume -> Dialog) and Cross never dispatches
+it -- the row was drawn without registration in the item list/count and
+handler tables. The renderer mission has been steered to fix the registration
+mechanism itself before adding the 1080p/1440p/4K VIDEO rows, with acceptance
+= cursor-reachable, Cross-dispatches, knob demonstrably changes, persists.
+
 ## JARVIS FLEW (bobby, 2026-11-20, scripted input)
 
 Synthetic input played Crash Course: slingshot release -> flight across
