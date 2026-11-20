@@ -37,6 +37,29 @@ and the cache files. It produced the matching ELF and 8,044 cache files,
 then reused both on a second invocation.
 See [README.md](README.md) for the workstation and target commands.
 
+## Best-it-can-be sweep: COMPLETE
+
+- **ICON0 save FIXED (d700c39)**: the game skips its artwork loader, then writes
+  ICON0/PIC1 from NULL buffers with zero lengths. The port now supplies the
+  disc artwork; null + Vulkan runs wrote byte-identical icons and the full
+  131,072-byte profile. Fresh profile -> autosave -> reload -> persistence all
+  verified on beast. The last broken core-system path is closed.
+- **Online: intentionally locked.** Its menu gate checks network readiness,
+  independent of T_TUTORIAL; with the trainer active it renders "unavailable"
+  and keeps its padlock. Correct for an offline port; online needs psnr infra.
+- **Deployment hardened (9398a8b, ded847f)**: workstation prepares guest
+  sources + cache, targets build from copies. A separate raw-disc test on
+  beast decrypted EBOOT.BIN, extracted all 8,044 cache files, and reused both
+  outputs on rerun.
+- **Upstream series: 12 patches, replay-clean, pushed to the fork (fb55163)**;
+  the port carries them (d48d8a6). Public repo docs synced (bd8b1d8).
+- **Clean null regression PASSED** (the workstation compiler died under
+  memory pressure mid-sweep; the clean build completed on beast and the
+  checksum-verified binary booted on the workstation: gate -> consent -> menu
+  -> autosave).
+- One Vulkan run timed out pre-cache-gate while dumping every 12 frames
+  (vs the standard 120) -- cause unconfirmed, likely dump overhead; noted.
+
 ## Renderer verification (bobby): settings PASS, silhouette survives
 
 Sync Rate FULL PASS: Down lands on the row (highlighted frame), Cross 30->20,
