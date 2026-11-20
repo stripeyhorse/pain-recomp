@@ -25,7 +25,9 @@ legally obtained dump; the pipeline regenerates everything.
 | `scripts/first_run.sh` | local headless run |
 | `patches/upstream/` | the five upstreamable ps3recomp fixes this port earned (with cover notes) |
 | `NOTES.md` | the full bring-up log: every root cause and its evidence |
-| `screenshots/` | frame dumps captured via `PS3RECOMP_METAL_FRAME_DUMP` |
+
+Frame captures (`PS3RECOMP_METAL_FRAME_DUMP`) are intentionally not distributed:
+they contain the game's rendered output and stay on the machine that made them.
 
 ## Build from your own dump
 
