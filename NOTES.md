@@ -8,7 +8,10 @@ to write ICON0 and PIC1 using the uninitialised artwork fields. In the
 baseline, cellSaveData received zero lengths and a null buffer on the
 first file operation, before it could write SYS-DATA. The port supplies
 the corresponding loose artwork from the owned disc for those empty
-requests. It uses the standard native SaveData write sequence.
+requests. It uses the standard native SaveData write sequence. The local
+null run wrote 76,668-byte ICON0 and 36,254-byte PIC1 files that matched the
+disc byte-for-byte, then wrote and reloaded the 131,072-byte SYS-DATA.
+The trainer applied the temporary tutorial flag after that reload.
 
 The main menu registers `OnlinePlayAvailable` at the call site
 `0x143B3C`, bound to `0x150CE0`. It checks a runtime menu byte and calls
@@ -21,7 +24,11 @@ its own compatible endpoint and end-to-end validation.
 
 The workstation prepares the decrypted executable, HDD cache, full
 LevelScript catalogue, HLE table and wrapped PPU sources.
-The target scripts compile and launch the copied inputs.
+Beast is the primary deployment target. Its build script can reuse an
+existing dependency prefix from an isolated deployment directory. The
+raw-disc preparation path was exercised directly on Beast from EBOOT.BIN
+and the cache files. It produced the matching ELF and 8,044 cache files,
+then reused both on a second invocation.
 See [README.md](README.md) for the workstation and target commands.
 
 ## Renderer verification (bobby): settings PASS, silhouette survives
@@ -39,13 +46,13 @@ patches at landing -- the stencil fix was not the cause. The release boundary
 isolates the ragdoll/airborne program pair; round 2 diffs those programs and
 their draw state.
 
-## Renderer + native Video settings (local, pending bobby verification)
+## Renderer + native Video settings (initial local implementation)
 
 PAIN 61048ef: added menu rows now register in the game's LIVE navigation and
 selection tables -- Down lands on Sync Rate, Cross cycles the cap (30 -> 20)
 AND SAVES. A **Video/Display** page is reachable from Audio with window and
 fullscreen presets through 4K, plus an Image Quality page on Metal.
-Toolkit 9bb0420: a confirmed front/back stencil-state fix (the release trace
+Toolkit fb55163: a confirmed front/back stencil-state fix (the release trace
 showed the in-flight pipelines are particle effects while character/stencil
 programs predate the release -- a strong silhouette candidate, pending the
 matched Metal capture). Vulkan locally verified 1440p/4K windowed and a 4K
@@ -53,7 +60,7 @@ fullscreen swapchain. **Post-process Scale is implemented; guest geometry
 renders at its original 720p** (true internal scale is documented as deeper
 draw-engine work, not faked). Local null + Vulkan builds pass.
 
-## Consolidated verification (bobby): FreePlay PASS, two structural partials
+## Earlier consolidated verification on Metal
 
 Downtown **FreePlay PASSED** in full: DLC character Daxter in the Downtown
 slingshot with the score HUD, the FreePlay LevelScript linking 19 imports,

@@ -1,124 +1,119 @@
-# PainRecomp — Pain (PS3) as a native program
+# PainRecomp
 
-A native port of **Pain** (Idol Minds / SCEE, 2007; disc release **BCES00548**,
-game version 1.00) built with [ps3recomp](https://github.com/sp00nznet/ps3recomp):
-the game's PowerPC (PPU) and SPU code is statically recompiled to C++ and linked
-against a clean-room reimplementation of the PS3's system libraries. It is the
-game's own code running as a normal program — no emulator.
+PainRecomp runs the European **PAIN BCES00548 01.00** disc release as a
+native program. The port statically recompiles PowerPC and SPU code with
+[ps3recomp](https://github.com/stripeyhorse/ps3recomp) and uses its
+reimplementation of the PS3 system libraries. You supply your own legally
+obtained disc dump. Decrypted executables, lifted sources, game files and
+frame captures stay local.
 
-**Status:** boots, passes its first-boot cache gate, loads its frontend assets
-and renders them with the game's own shaders. Verified running on **macOS
-arm64 (Apple M2, Metal)** at a sustained ~23 fps present rate, and headless on
-Linux x86-64 (null backend). Navigation/input bring-up is the current frontier.
+## Status
 
-This repository contains **no game code or data**. You build from your own
-legally obtained dump; the pipeline regenerates everything.
+- **Playable offline on macOS arm64 with Metal and Linux x86-64 with
+  Vulkan.** Verified on an Apple M2 and GTX 1080 Ti. The port passes the
+  cache and first-run consent screens. On Metal, Downtown FreePlay loaded
+  with a DLC character, and a scripted Crash Course launch advanced the
+  lesson after a hit. The LevelScript catalogue covers 90 distinct modules
+  at 91 disc paths.
+- **Native Audio and Video controls.** Sync Rate is a selectable Audio row
+  in Extras and the pause menu. It cycles Variable, 20, 30 and 60 FPS and
+  persists in the INI. Video/Display offers window and fullscreen output
+  presets through 4K. Metal's Image Quality page controls post-processing.
+  Post-process Scale changes the scanout effects buffer. The game still
+  renders its geometry and scene targets at the original 720p. An
+  airborne character silhouette defect remains in the Metal verification.
+- **Profile saves.** The port supplies missing save artwork from the disc
+  and lets the native autosave write ICON0, PIC1 and SYS-DATA. A fresh
+  Linux null-backend profile completed the save and reloaded on restart.
+  See [NOTES.md](NOTES.md) for the test results.
+- **Offline trainer.** Set `PAIN_UNLOCK_ALL=1` or `unlock_trainer = on`
+  in `settings.ini` for the session. It sets the live Crash Course
+  completion stat and filters that temporary change out of the profile
+  write. DLC assets must be present on the disc.
+- **Online stays locked.** The native menu checks network readiness in
+  addition to progression. Online requires compatible PSN and PAIN
+  Medius services. The toolkit's optional psnr client provides parts of PSN
+  emulation. PAIN's end-to-end service path is unverified.
 
-## What is where
+Linux null-backend runs provide a headless boot and profile check. Windows
+and PS5 have no acceptance result. See [NOTES.md](NOTES.md) for backend and
+gameplay evidence.
 
-| Path | Contents |
-|---|---|
-| `main.cpp`, `stubs.cpp` | port glue: boot order, VFS, game-specific HLE overrides |
-| `spu/pm_reg.c` | registers the SPURS policy module by content fingerprint |
-| `scripts/extract_cache.py` | offline pre-seed: the 8,044-file HDD cache from the disc's own manifest |
-| `scripts/push_bobby.sh`, `mac_build.sh`, `mac_shaders.sh`, `mac_run.sh` | deploy to an Apple Silicon Mac (sudo-free: pip cmake/ninja, source-built SDL2/glslang/SPIRV-Cross) |
-| `scripts/first_run.sh` | local headless run |
-| `patches/upstream/` | the five upstreamable ps3recomp fixes this port earned (with cover notes) |
-| `NOTES.md` | the full bring-up log: every root cause and its evidence |
+## Workstation preparation
 
-Frame captures (`PS3RECOMP_METAL_FRAME_DUMP`) are intentionally not distributed:
-they contain the game's rendered output and stay on the machine that made them.
+The public branch mirrors documentation, preparation scripts and the
+toolkit series. The current build and deployment procedures below use the
+full working port checkout. Use a sibling checkout of the toolkit fork at
+the revision listed in [the 12-patch series](patches/upstream/README.md).
 
-## Build from your own dump
+```sh
+# Run from the full pain-recomp checkout.
+# GAME_DIR is the PS3_GAME directory in your dump.
+export GAME_DIR="/path/to/your dump/PS3_GAME"
+export RPCS3_BIN="/path/to/rpcs3"
+./scripts/prepare.sh
+elf="$GAME_DIR/USRDIR/EBOOT.elf"
 
-```bash
-# 0. decrypt (your own dump; rpcs3 --decrypt writes EBOOT.elf beside EBOOT.BIN)
-QT_QPA_PLATFORM=offscreen <rpcs3> --decrypt <PS3_GAME/USRDIR/EBOOT.BIN>
-
-# 1. analysis (stage 1)
-python ps3recomp/tools/ppu_loader.py <EBOOT.elf> -o analysis/
-python ps3recomp/tools/gen_imports.py <EBOOT.elf> -o analysis/imports_named.json
-python ps3recomp/tools/extract_spu_images.py <EBOOT.elf> --output spu-images/
-
-# 2. lift (chunk small enough to keep GCC's peak RAM per TU sane)
-python ps3recomp/tools/ppu_lifter.py <EBOOT.elf> \
+python3 ../ps3recomp/tools/ppu_loader.py "$elf" -o analysis/
+python3 ../ps3recomp/tools/gen_imports.py "$elf" -o analysis/imports_named.json
+python3 ../ps3recomp/tools/ppu_lifter.py "$elf" \
     --functions analysis/EBOOT.functions.json \
-    --hle-stubs  analysis/EBOOT.imports.json \
+    --hle-stubs analysis/EBOOT.imports.json \
     --insn-patches patches/unlock-trainer.json \
     --output recompiled --jobs 12 --chunk-lines 150000
 
-# 3. SPURS policy module: carve 12,160 bytes at guest 0xB70B80 out of the
-#    ELF, wrap at base 0xA00, lift, and build spu/pm_reg.c into the port
-#    (see NOTES.md "Boot 2/3" for the exact recipe)
-
-# 4. build
-cmake -B build -G Ninja -DPS3RECOMP_DIR=<ps3recomp checkout>
-cmake --build build -j 8
-
-# 5. pre-seed the HDD cache the game's gate looks for, then run
-python scripts/extract_cache.py <disc>/USRDIR/CacheDesc.dat <disc>/USRDIR/CacheData.pak hdd0/game/BCES00548
-PS3_HDD0_ROOT=$PWD/../hdd0 ./build/PainRecomp <EBOOT.elf>
+# Prepare the SPU workload sources and register the raw policy module.
+# See the SPU and policy-module sections in NOTES.md.
+./scripts/prepare_deploy.sh
 ```
 
-Sha256 of the decrypted EBOOT.elf this port was brought up against:
-`411d00aa3809706376bc8fe55e309844310e37e69152bdbb15627be5833fe40b`.
+`prepare.sh` accepts a raw `EBOOT.BIN` and the two disc cache files
+`CacheDesc.dat` and `CacheData.pak`. It decrypts the executable with RPCS3
+and extracts the HDD cache under the workspace's `hdd0`. Override that
+destination with `HDD0_ROOT`. Repeating preparation reuses the valid ELF
+and completed cache.
 
-### Standard deployment
+`prepare_deploy.sh` refreshes an existing PPU lift's trainer guards and
+animation dispatch, generates the HLE import table and wrapped PPU sources,
+and prepares the full LevelScript catalogue. It needs `RPCS3_BIN` when
+generating the catalogue for the first time.
 
-The Bobby and Beast push scripts expect the full LevelScript catalogue. They
-validate the 90 modules and 91 disc paths, apply the trainer guards to a
-compatible local EBOOT lift, and copy the catalogue's build sources and
-runtime images. Set `RPCS3_BIN` for the first push if the catalogue needs to
-be generated, or prepare it locally with the following command.
+## Build and run
 
 ```sh
-python3 scripts/prepare_levelscripts.py "<disc>/PS3_GAME/USRDIR" --rpcs3 /path/to/RPCS3
+cmake -S . -B build -G Ninja -DPS3RECOMP_DIR=../ps3recomp
+cmake --build build --parallel 8
+./scripts/first_run.sh 180
 ```
 
-The remote build scripts explicitly select `prx/generated/full`. This
-replaces a cached selection of the tutorial-only catalogue in CMake.
-The generated catalogue stays outside Git.
+Use `PS3_GAMEDATA_ROOT` to keep the player profile separate from the
+installed cache. The native bootstrap may show an offline network message
+before the main menu. The first run can ask for consent before it continues.
 
-### Unlock trainer
+### Deploy to Beast
 
-Launch with `PAIN_UNLOCK_ALL=1` to set the live Crash Course completion stat
-for the session. Normal catalogue checks and their UI readers share the
-guarded lift's owned state. The native save callback filters the trainer's
-temporary stat from the profile payload. To run stock, restart with the
-environment variable unset and no `unlock_trainer = on` entry in the INI.
-Campaign progress earned through gameplay is saved normally.
+Run `./scripts/push_beast.sh` on the workstation after preparation. Its
+default destination is `~/pain-ps3` on Beast. Set `PAIN_BEAST_DIR` to a
+different directory name for a parallel build. The script copies the source
+trees, disc files and completed cache. On Beast, run `beast_build.sh deps` once
+and `beast_build.sh port` for subsequent Vulkan builds. An isolated checkout can
+reuse the shared dependencies with `PAIN_BEAST_DEPS_ROOT="$HOME/pain-ps3"`.
 
-For a local checkout with an existing lift, run
-`python3 scripts/relift_unlock_trainer.py "<disc>/PS3_GAME/USRDIR/EBOOT.elf"`
-before rebuilding. The full lift command above already includes the guards.
+```sh
+# Run in the Beast deploy root.
+export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
+export PS3RECOMP_VK_GUEST_PROGRAMS=1
+export PS3_HDD0_ROOT="$PWD/hdd0"
+./pain-recomp/build/PainRecomp "$PWD/game/PS3_GAME/USRDIR/EBOOT.elf"
+```
 
-## The four boot blockers, and their fixes
+For manual raw-disc preparation on Linux, set `GAME_DIR`, `HDD0_ROOT` and
+`RPCS3_BIN` on the target and run `scripts/prepare.sh` explicitly. Target builds
+still consume the workstation-generated PPU, SPU and PRX sources. The Metal
+helpers remain available for a separately provisioned macOS target.
 
-1. **TOC corruption** — the title's codegen restores r2 after *every* call;
-   the lifter now emits the glink TOC save (50,988 sites; upstream patch 1).
-2. **SPURS policy module not lifted** — a raw SPU image in the PPU data,
-   lifted at base 0xA00 and registered by fingerprint (`spu/pm_reg.c`).
-3. **The first-boot install gate** — `cellGame` answered with a placeholder
-   title ID; the scaffold now initialises from the disc PARAM.SFO (upstream
-   patch 4), and the 8,044-file cache is pre-seeded offline from the disc's
-   own `CacheDesc.dat` manifest (byte-exact: 1,061,512,652 bytes).
-4. **Blank frame** — guest-shader MSL translation wasn't built;
-   `scripts/mac_shaders.sh` builds glslang + SPIRV-Cross from source.
+## Licence
 
-Full evidence for each: `NOTES.md`.
-
-## Targets
-
-- **macOS arm64 (Metal)** — running (Apple M2 verified)
-- **Linux x86-64 (Vulkan opt-in / null)** — headless verified
-- **Windows (D3D12)** — expected to work; untested here
-- **PlayStation 5** — feasibility investigation in progress
-
-## Legal
-
-This project is not affiliated with or endorsed by the game's rights holders.
-It distributes none of the game's assets, code or data; it exists for
-preservation, study and interoperability. All rights to the game belong to
-their owners. You must provide your own legally obtained copy.
-
-Port code is MIT; see `LICENSE`.
+The port is MIT licensed and exists for preservation and interoperability.
+It is unaffiliated with the rights holders. The game and its assets remain
+the property of their respective owners.
