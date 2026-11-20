@@ -273,3 +273,16 @@ real prologue at +0x10) and registered by fingerprint in `spu/pm_reg.c`
 - [ ] PS5 exploration (later; needs homebrew toolchain + jailbroken console)
 
 ## Status
+
+## Published
+
+- https://github.com/stripeyhorse/pain-recomp — this port (clean single-root
+  history; no game code, data, captures or carved binaries are tracked or
+  pushed; the local screenshots/ and spu-jobmods/ stay untracked on purpose).
+- https://github.com/stripeyhorse/ps3recomp — fork of sp00nznet/ps3recomp
+  carrying the 5-commit upstream series (lifter TOC save, GCC musttail,
+  POSIX diagnostics, template PARAM.SFO init, guide recipes); PR-ready.
+- Raw-dump pipeline: scripts/prepare.sh decrypts the retail EBOOT.BIN via
+  rpcs3 when no EBOOT.elf exists and rebuilds the HDD cache from the raw
+  CacheDesc.dat + CacheData.pak when the completion marker is absent;
+  both launchers call it first.
