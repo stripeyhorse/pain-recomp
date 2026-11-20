@@ -96,6 +96,24 @@ in two environment-enabled processes. Both first airborne crops had zero
 exact silhouette-colour pixels (round 5 baseline 6,670), and Jarvis stayed
 textured through street contact. The sling band can still turn grey.
 
+## Silhouette round 7: DURABLE MITIGATION COMMITTED; A/B airtight
+
+The pose pin is now a durable opt-in in the NORMAL port build:
+PAIN_PIN_POSE_AT_KICK=1 or pin_pose_at_kick = on in settings.ini (default
+off; port 82ff4d3 + 5c13c40, toolkit hook cbb6487). Two more independent
+headless-Vulkan flights on beast: 0 silhouette-colour pixels each, Jarvis
+textured through street contact; the SAME binary with the pin off reproduced
+6,670 in a debugger run -- same-binary env-toggle A/B. Reference run (warmed
+RPCS3 retail): the centred release, list retirement, reference advance and
+pose copy captured; all eight sampled waits at 0x00191afc saw the expected
+fence before 0x001837b8; watchpoints traced seven matching SET_REFERENCE
+writes to the PPU. Still open for round 8: both matrix GETL payloads for a
+single generation + the WWS retirement event (is the fence advancing too
+early?); the sling-band producer (+ second-aim / other-actor / moving-occluder
+checks); the historical PAIN park's skipped command (the FIFO fixture proved
+wrap recovery CAN skip SET_REFERENCE 0x2260 while advancing GET to PUT).
+Suite green: 35/35 CTest both backends, 21/21 Vulkan, 7/7 standalone.
+
 ## Silhouette round 6: BROKEN IN PRACTICE — 0 pixels, two independent flights
 
 **Jarvis textured from release through street contact, twice, with 0
@@ -183,7 +201,7 @@ seam if clears check out.
   ICON0/PIC1 from NULL buffers with zero lengths. The port now supplies the
   disc artwork; null + Vulkan runs wrote byte-identical icons and the full
   131,072-byte profile. Fresh profile -> autosave -> reload -> persistence all
-  verified on beast. The last broken core-system path is closed.
+  verified on beast.
 - **Online: intentionally locked.** Its menu gate checks network readiness,
   independent of T_TUTORIAL; with the trainer active it renders "unavailable"
   and keeps its padlock. Correct for an offline port; online needs psnr infra.
@@ -313,10 +331,9 @@ CacheData.pak), the fingerprint misses and the interpreter catches them — coll
   via the runtime FFmpeg loader (cellVdec/cellDmux/cellAdec route).
 - ⚠️ Dead online-era features to stub offline: cellVoice (17, mic chat), cellRec (5, video
   recording), cellMusicUtility (8) + cellSearchUtility (9, in-game custom soundtracks).
-- ❓ `LevelScriptExport` (10 imports, **all NIDs unknown** to ps3recomp and public NID DBs) —
-  unknown library, possibly the game's own cross-PRX scripting API (dev-kit leftover?) or
-  resolved by a runtime-loaded module. Pain runs in RPCS3 without it being known, so likely
-  never called; the recomp's missing-NID log will tell us. Watch at first boot.
+- ✅ `LevelScriptExport` (10 imports, NIDs absent from ps3recomp and public NID DBs) —
+  RESOLVED: it is the per-level `LevelScript.sprx` interface. The port lifts the 90
+  distinct modules (91 disc paths) and binds the ten NIDs to the active level's exports.
 - Unnamed NIDs to resolve later: 49 across cellSysutil(11), cellVoice(4), sys_net(4),
   cellSearchUtility(3), cellOskExtUtility(5), cellVideoExportUtility(3), cellMusicUtility(2),
   cellHttp(5), LevelScriptExport(10), cellRtc(1), cellVideoUpload(1).
@@ -332,7 +349,7 @@ CacheData.pak), the fingerprint misses and the interpreter catches them — coll
 - `USRDIR/CacheData.pak` (1.01 GB) + `CacheDesc.dat`: the bulk of game assets.
 - RPCS3 rates Pain **Playable**; known RPCS3 bug: freeze after ~15 min (emulator issue #12996,
   not a game bug). RPCS3 remains the behavioural reference.
-- EBOOT has NO .sprx files in USRDIR → LevelScriptExport, if real, comes from somewhere else.
+- The `LevelScript.sprx` modules that export LevelScriptExport live under each level's directory, not next to the EBOOT.
 
 ## Pipeline (reproducible)
 
@@ -383,14 +400,16 @@ stack roulette that 313 ctors won and #314 lost.
 before every direct `bl` call — exactly the glink save (patch in
 [the toolkit series](patches/upstream/README.md), patch 1).
 
-Also observed, not yet fixed: one indirect call through a game import-table slot
+Historical (not seen since the TOC fix): one indirect call through a game import-table slot
 landed on an HLE-inject OPD (`0x20000028`, opd[0]=0) and was dropped by the
-null-call handler — symptom of the poisoned chain; revisit if it survives the TOC fix.
+null-call handler — a symptom of the poisoned chain.
 
 Local runtime diagnostics added (all upstreamable): r2 in null-page reports,
 `PPU_TOCWATCH` on POSIX, r2 in the `[CALL]` indirect-call trace.
 
-### Boot 3 (title-ID fix + pre-seed): INSTALL GATE PASSED — game runsRoot cause of the whole install saga (sol 6.2 xhigh report): our port's cellGame
+### Boot 3 (title-ID fix + pre-seed): INSTALL GATE PASSED — game runs
+
+Root cause of the whole install saga (sol 6.2 xhigh report): our port's cellGame
 reported the placeholder title ID `BLES00000` because `main.cpp` never called
 `cellGame_init_from_paramsfo` — so Pain never activated its disc SKU
 (`EP9000-BCES00548_00`), took a wrong game-data path, and fell into the
@@ -506,7 +525,7 @@ content only ever existed on the dead ad server) and optional
 `autorun.txt`/`RunConfig.txt`. The ad writer's open-for-write onto the disc
 path is also tolerated by the game.
 
-**Open investigation (sol 6.2 xhigh)**: skip the install check via a title
+**Historical investigation, closed by Boot 3 (title-ID fix + pre-seed; the stock installer path itself remains unverified)**: skip the install check via a title
 hack vs pre-seed the installed state (reference from an RPCS3 run — blocked
 on firmware PUP: Sony's CDN unreachable from this network; need the user's
 PS3UPDAT.PUP).
@@ -521,17 +540,16 @@ real prologue at +0x10) and registered by fingerprint in `spu/pm_reg.c`
 - [x] Stage-1 PPU analysis: 25,475 functions / 418 imports / 31 libs
 - [x] SPU images extracted (3) and identified (Havok SPURS collide+integrate) + lifted (898 funcs)
 - [x] PPU lift → C++ (37,534 functions, 110 chunks, 1.3 GB)
-- [x] First link + CRT boot (null backend) — boots, then r2=0 cascade (root cause found + fixed: glink TOC save; rebuild in flight)
-- [ ] Re-lift + boot past the ctor list into game init
-- [ ] First frames (Vulkan on beast / Metal on bobby)
-- [ ] Menus → in-game bring-up loop
-- [ ] LevelScript.sprx pipeline: decrypt + lift the 91 level PRXs, bind LevelScriptExport
+- [x] First link + CRT boot (null backend) — r2=0 cascade root-caused and fixed (glink TOC save)
+- [x] Re-lift + boot past the ctor list into game init
+- [x] First frames (Vulkan on beast / Metal on bobby)
+- [x] Menus → in-game bring-up loop
+- [x] LevelScript.sprx pipeline: 90 distinct modules across 91 disc paths lifted and bound; Crash Course and Downtown FreePlay verified
 - [ ] macOS .app packaging (bobby)
-- [ ] PS5 exploration (later; needs homebrew toolchain + jailbroken console)
+- [x] PS5 Phase A cross-build and Phase C desktop prep
+- [ ] PS5 Phase B console acceptance, then Phase C RADV/HDMI (needs the provisioned console)
 
-## Status
-
-## Beast (Linux, GTX 1080 Ti, Vulkan): running headless
+## Beast (Linux, GTX 1080 Ti, Vulkan): first headless verification (historical, 2026-11-20)
 
 The port runs on beast too, with the title's own guest shaders, via the
 sudo-free Vulkan bring-up in `scripts/beast_build.sh` (SDL2 2.32.10, Vulkan
@@ -546,7 +564,7 @@ path (independently vision-verified). Beast's copy of these notes and the run
 logs live in `beast:~/pain-ps3/`. This run doubles as the desktop-Vulkan
 reference the PS5 Phase C plan calls for.
 
-## Gameplay bring-up (bobby, scripted input): menu → Crash Course → the PRX wall
+## Gameplay bring-up (bobby, scripted input): menu → Crash Course → the PRX wall (historical; superseded by the LevelScript pipeline)
 
 Vision-verified scripted navigation on bobby: the MAIN MENU → **Crash Course**
 loading screen (illustrated slingshot + Jarvis), tutorial `levelData.chl` and
@@ -566,11 +584,12 @@ the game's segments), and implement the port's `ps3_load_prx_modules()` hook
 to serve them by path and bind LevelScriptExport's ten NIDs to the active
 module's exports (the FIRMWARE_LLE.md step-4 pattern applied to game PRXs).
 
-## Native integration missions (all compile-verified locally; bobby verification queued)
+## Native integration missions (historical milestone; the later Metal and beast sections above record the verified results)
 
-**Unlock trainer** (`PAIN_UNLOCK_ALL=1`, default off, fully reversible): all four
-main-menu padlocks gate on the same `T_TUTORIAL` profile flag (set by Crash Course
-completion); the DLC unlocks compare 16-byte tokens against catalogue records. The
+**Unlock trainer** (`PAIN_UNLOCK_ALL=1`, default off, fully reversible): three
+main-menu padlocks gate on the `T_TUTORIAL` profile flag (set by Crash Course
+completion) and were removed in the observed run; Online stays locked on its
+own network gate; the DLC unlocks compare 16-byte tokens against catalogue records. The
 trainer bypasses those checks in memory via 19 guarded instruction patches
 (verified word-for-word against BCES00548) + a DLC-token shim. Unset the env and
 restart for stock behaviour. Compile-verified; padlock removal, Single Player
