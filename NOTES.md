@@ -96,6 +96,28 @@ in two environment-enabled processes. Both first airborne crops had zero
 exact silhouette-colour pixels (round 5 baseline 6,670), and Jarvis stayed
 textured through street contact. The sling band can still turn grey.
 
+## Silhouette hunt CLOSED (round 9): the pin is the answer
+
+The slot-order hypothesis fell to the cleanest control of the hunt: the port
+fetched all **19,677** sampled commands in perfect slot order yet tore 7 of 9
+cloth pairs, while RPCS3 matched all 7 pairs DESPITE 189 cross-worker fetch
+inversions. The game's matrix-read safety is not slot order -- it is a
+property of the reference's execution/memory model, not expressible as a
+narrow scheduler rule we violated. Verdict: **the pose pin ships as the
+answer** (default ON since 84c9332), same-binary A/B proven repeatedly
+(0 vs 6,670 / 2,995 px). The general question -- SPURS admission/execution
+timing semantics for concurrent host-thread SPURS -- goes upstream as an open
+research note. The broad sling band did not recur (writer unidentified).
+Suite green at close: 35/35 CTest both backends, 21/21 Vulkan, 7/7 standalone.
+
+THE NINE-ROUND ARC, for the record: shaders ruled out (byte-identical) ->
+depth ruled out (20 forced clears) -> matrix generation CONFIRMED
+(generation-pair bytes, RPCS3 8/8 vs port 6/6 divergent) -> reference gate
+ruled out (five post-reference mismatches) -> admission measured (2.6 us
+pre-kick) -> slot order ruled out (19,677 in-order vs 189 inversions) ->
+the deliverable: PAIN_PIN_POSE_AT_KICK, default on, pinned flights textured
+release-through-landing across four independent runs on two backends.
+
 ## Silhouette round 8: byte-exact generation evidence; the gate is not the gate
 
 All six matrix elements for both jobs, eight generations, both stacks:
