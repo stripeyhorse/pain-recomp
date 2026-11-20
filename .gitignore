@@ -13,3 +13,7 @@ game/
 EBOOT.BIN
 EBOOT.elf
 *.pak
+# Game-derived captures and carved binaries stay local, never tracked
+screenshots/
+spu-jobmods/
+*.ppm
