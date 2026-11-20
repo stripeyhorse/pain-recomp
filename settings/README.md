@@ -28,6 +28,7 @@ updates the INI.
 | `vulkan_window`, `vulkan_guest_programs` | on, off | Select Vulkan window output and guest shader use. Shader translation needs the toolkit dependencies. |
 | `unlock_trainer` | on, off | Sets `PAIN_UNLOCK_ALL` for the optional guarded lift. |
 | `pin_pose_at_kick` | on, off | Sets `PAIN_PIN_POSE_AT_KICK`. Pins the actor pose at the list kick for the prepass and material jobs. Defaults to off. |
+| `creator_first` | on, off | Sets `PS3_CREATOR_FIRST`. A new PPU thread at the creator's priority or lower starts after the creator's next blocking call, so the boot's GameContent and SysCacheCreate handshakes cannot lose their completion flag. Defaults to on. |
 
 INI edits apply at startup. The window presentation settings require the
 toolkit change for Metal and Vulkan. The null backend has no graphics output.
