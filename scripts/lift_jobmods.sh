@@ -11,7 +11,12 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 elf="${1:-$root/game/Pain_BCES00548/Pain BCES00548/PS3_GAME/USRDIR/EBOOT.elf}"
 out="$root/pain-recomp/spu"
-python3 "$root/ps3recomp/tools/lift_jobmods.py" --engine-elf "$elf" --out "$out" --merge-chunks
+# jobmod_entries.txt: function starts the static scan cannot find (reached only
+# through pointers built at run time), recorded by running the game with
+# SPU_INTERP_ENTRIES=<file> and merged here. A run that still prints a
+# non-trivial [spu-interp] step rate under SPU_INTERP_STATS has more to add.
+python3 "$root/ps3recomp/tools/lift_jobmods.py" --engine-elf "$elf" --out "$out" --merge-chunks \
+    --extra-entries "$root/pain-recomp/scripts/jobmod_entries.txt"
 # The job modules take image ids 200..210. The policy module must sit outside
 # that range or its functions are registered under a job module's id.
 grep -q 'spu_begin_image(199);' "$out/pm_reg.c" || {
