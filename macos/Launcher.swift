@@ -24,6 +24,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private var chooseButton: NSButton!
     private var playButton: NSButton!
     private var logButton: NSButton!
+    private var fpsButton: NSButton!
     private var selection: Selection?
     private var activeProcess: Process?
     private var currentLog: URL?
@@ -95,6 +96,9 @@ final class Launcher: NSObject, NSApplicationDelegate {
         playButton = NSButton(title: "Play", target: self, action: #selector(play))
         playButton.keyEquivalent = "\r"
         logButton = NSButton(title: "Show Log", target: self, action: #selector(showLog))
+        fpsButton = NSButton(checkboxWithTitle: "Show FPS", target: self, action: #selector(saveFPSChoice))
+        fpsButton.state = UserDefaults.standard.bool(forKey: "showFPS") ? .on : .off
+        fpsButton.toolTip = "Show display and game FPS in the game window title."
         progress.style = .spinning
         progress.controlSize = .small
         progress.isDisplayedWhenStopped = false
@@ -106,7 +110,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
         actions.alignment = .centerY
         actions.spacing = 10
 
-        let layout = NSStackView(views: [sourceLabel, statusLabel, actions])
+        let layout = NSStackView(views: [sourceLabel, statusLabel, fpsButton, actions])
         layout.orientation = .vertical
         layout.alignment = .leading
         layout.spacing = 12
@@ -149,6 +153,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
 
     private func updateButtons() {
         chooseButton.isEnabled = activeProcess == nil
+        fpsButton.isEnabled = activeProcess == nil
         playButton.isEnabled = activeProcess == nil && selection != nil
         logButton.isEnabled = currentLog != nil || files.fileExists(atPath: logs.path)
     }
@@ -200,7 +205,20 @@ final class Launcher: NSObject, NSApplicationDelegate {
         var environment = ProcessInfo.processInfo.environment
         environment["PS3_VFS_ROOT"] = selection.discURL.deletingLastPathComponent().path
         environment["PS3_HDD0_ROOT"] = selection.preparedURL.appendingPathComponent("hdd0").path
-        environment["PS3_HDD1_ROOT"] = state.appendingPathComponent("hdd1").path
+        let hdd1 = state.appendingPathComponent("hdd1", isDirectory: true)
+        do {
+            try files.createDirectory(at: hdd1, withIntermediateDirectories: true,
+                                      attributes: [.posixPermissions: 0o700])
+        } catch {
+            statusLabel.stringValue = "PAIN couldn't create its cache folder. \(error.localizedDescription)"
+            return
+        }
+        environment["PS3_HDD1_ROOT"] = hdd1.path
+        if fpsButton.state == .on {
+            environment["PS3RECOMP_METAL_FPS"] = "1"
+            environment["AUDIO_RATE"] = "1"
+        }
+        environment["PS3_TITLE"] = "PAIN"
         environment["PS3_GAMEDATA_ROOT"] = state.appendingPathComponent("gamedata").path
         environment["PAIN_SETTINGS_PATH"] = state.appendingPathComponent("settings.ini").path
         environment["PAIN_LEVELSCRIPT_DIR"] = selection.preparedURL.appendingPathComponent("levels").path
@@ -254,6 +272,10 @@ final class Launcher: NSObject, NSApplicationDelegate {
             try? message.write(to: log, atomically: true, encoding: .utf8)
         }
         updateButtons()
+    }
+
+    @objc private func saveFPSChoice() {
+        UserDefaults.standard.set(fpsButton.state == .on, forKey: "showFPS")
     }
 
     @objc private func showLog() {

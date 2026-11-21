@@ -117,6 +117,7 @@ void     cellGcmTickVBlank(void);
 void     cellGcmTickFlip(void);
 int      cellGcm_take_flip_pending(void);
 void     cellGcm_rsx_process_fifo(void);      /* drain get -> put */
+void     cellGcm_fifo_kick_wait(unsigned ms); /* wake early for a pending fence */
 unsigned cellGcm_flip_request_count(void);
 }
 
@@ -229,7 +230,8 @@ static DWORD WINAPI frame_clock(LPVOID)
     ULONGLONG next_tick = GetTickCount64();
 
     for (;;) {
-        Sleep(4);
+        if (rsx_ok) cellGcm_fifo_kick_wait(4);
+        else Sleep(4);
         ULONGLONG now = GetTickCount64();
 
         int fired = 0;
