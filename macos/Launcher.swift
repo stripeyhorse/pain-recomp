@@ -238,6 +238,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
             environment["AUDIO_RATE"] = "1"
         }
         environment["PS3_TITLE"] = "PAIN"
+        environment["PAIN_BUILD"] = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
         environment["PS3_GAMEDATA_ROOT"] = state.appendingPathComponent("gamedata").path
         environment["PAIN_SETTINGS_PATH"] = state.appendingPathComponent("settings.ini").path
         environment["PAIN_LEVELSCRIPT_DIR"] = selection.preparedURL.appendingPathComponent("levels").path

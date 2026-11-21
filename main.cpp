@@ -59,6 +59,7 @@
 #if defined(__APPLE__)
 #include <pthread/qos.h>
 #endif
+#include "ps3emu/thread_name.h"
 #include <atomic>
 #include <mutex>
 #include <pthread.h>
@@ -246,6 +247,7 @@ static DWORD WINAPI frame_clock(LPVOID)
 {
     const char* title = getenv("PS3_TITLE");
     if (!title || !*title) title = "ps3recomp";
+    ps3_thread_name("rsx");
 
 #if defined(__APPLE__)
     /* thread_qos: the RSX thread, like the guest's main thread and the SPURS
@@ -514,6 +516,7 @@ int main(int argc, char** argv)
     if (!pain_settings::load()) return 1;
     if (!install_pose_pin()) return 1;
     printf("=== ps3recomp game runner ===\n");
+    { const char* build = getenv("PAIN_BUILD"); if (build && *build) fprintf(stderr, "[build] PAIN %s\n", build); }
     printf("[settings] Sync Rate is in Audio, under Extras or the pause menu.\n");
 
     if (!alloc_guest_vm()) {
