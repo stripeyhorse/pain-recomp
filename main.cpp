@@ -56,6 +56,7 @@
 #if defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>   /* the main thread's run loop, see run_guest */
 #include <condition_variable>
+#include <atomic>
 #include <mutex>
 #include <pthread.h>
 #endif
@@ -223,6 +224,13 @@ static void present_guest_frame(void)
 static std::mutex render_start_mutex;
 static std::condition_variable render_start_changed;
 static bool render_started;
+/* AppKit events are pumped by the main thread itself (run_guest). The frame
+ * clock used to do it with a dispatch_sync onto the main queue every pass:
+ * a blocking round trip in the loop that drains the RSX FIFO, and AppKit can
+ * trap in _DPSNextEvent when its event queue is first touched from inside a
+ * main-queue block (seen as a SIGTRAP three seconds into a launch). */
+static std::atomic<bool> window_live{false};
+static std::atomic<bool> window_closed{false};
 
 static bool preparing_shader_recipes()
 {
@@ -245,6 +253,7 @@ static DWORD WINAPI frame_clock(LPVOID)
         render_started = true;
     }
     render_start_changed.notify_one();
+    window_live.store(rsx_ok != 0, std::memory_order_release);
 #endif
 
     unsigned  last_flip = 0;
@@ -294,7 +303,11 @@ static DWORD WINAPI frame_clock(LPVOID)
             }
             cellGcm_rsx_process_fifo();
 
+#if defined(__APPLE__)
+            if (window_closed.load(std::memory_order_acquire)) {
+#else
             if (rsx_backend_pump() != 0) {
+#endif
                 rsx_ok = 0;              /* window closed */
                 /* ...so quit, as the console's Quit Game does, instead of
                  * leaving the game running with no window. */
@@ -306,6 +319,11 @@ static DWORD WINAPI frame_clock(LPVOID)
              * present freely, so the window is not blank during boot. */
             unsigned fc = cellGcm_flip_request_count();
             if (fc != last_flip) {
+                /* This present is that flip's: take its pending mark too, or
+                 * the next pass presents the same frame a second time. About
+                 * six frames in ten were presented twice, each a second
+                 * encode and drawable, and the FPS title counted both. */
+                (void)cellGcm_take_flip_pending();
                 present_guest_frame();
                 last_flip = fc;
             } else if (fc == 0) {
@@ -445,9 +463,14 @@ static int run_guest(uint32_t entry, uint32_t stack_top)
         fprintf(stderr, "[boot] could not start the guest thread (%d)\n", err);
         return -1;
     }
-    /* Short slices: CFRunLoopStop only ends a run that is already going. */
-    while (!__atomic_load_n(&g.done, __ATOMIC_ACQUIRE))
-        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
+    /* Short slices: CFRunLoopStop only ends a run that is already going, and
+     * each slice ends with this thread pumping the window's events. */
+    while (!__atomic_load_n(&g.done, __ATOMIC_ACQUIRE)) {
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.008, false);
+        if (window_live.load(std::memory_order_acquire) &&
+            !window_closed.load(std::memory_order_relaxed) && rsx_backend_pump() != 0)
+            window_closed.store(true, std::memory_order_release);
+    }
     pthread_join(th, nullptr);
     return g.rc;
 }
