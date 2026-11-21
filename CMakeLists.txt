@@ -175,6 +175,7 @@ set(PS3RECOMP_SCAFFOLD
 set(SPU_DIR "${CMAKE_CURRENT_SOURCE_DIR}/spu" CACHE PATH
     "Directory holding the lifted SPU images (<SPU_DIR>/<image>/spu_recomp.c)")
 option(PORT_ENABLE_SPU "Compile and register the title's lifted SPU images" ON)
+set(PAIN_SPU_OPT "-O2" CACHE STRING "Optimisation flags for the lifted SPU sources")
 
 set(PORT_SPU_INPUTS "" CACHE STRING
     "Input files to scan for all embedded SPU ELF programs (semicolon-separated decrypted ELF/PRX/data paths)")
@@ -265,7 +266,7 @@ if(SPU_SOURCES)
         INCLUDE_DIRECTORIES "${PS3RECOMP_DIR}/runtime/spu"
         COMPILE_DEFINITIONS SPU_USE_DISPATCH_MT)
     if(NOT MSVC OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set_source_files_properties(${SPU_SOURCES} PROPERTIES COMPILE_OPTIONS "-O2")
+        set_source_files_properties(${SPU_SOURCES} PROPERTIES COMPILE_OPTIONS "${PAIN_SPU_OPT}")
     endif()
 endif()
 

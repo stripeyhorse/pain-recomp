@@ -56,6 +56,9 @@
 #if defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>   /* the main thread's run loop, see run_guest */
 #include <condition_variable>
+#if defined(__APPLE__)
+#include <pthread/qos.h>
+#endif
 #include <atomic>
 #include <mutex>
 #include <pthread.h>
@@ -244,6 +247,12 @@ static DWORD WINAPI frame_clock(LPVOID)
     const char* title = getenv("PS3_TITLE");
     if (!title || !*title) title = "ps3recomp";
 
+#if defined(__APPLE__)
+    /* thread_qos: the RSX thread, like the guest's main thread and the SPURS
+     * lanes (cellSpurs.c), gates every frame. */
+    { const char* e = getenv("PS3_THREAD_QOS");
+      if (e && *e == '1') pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0); }
+#endif
     int rsx_ok = (rsx_backend_init(WINDOW_WIDTH, WINDOW_HEIGHT, title) == 0);
     fprintf(stderr, "[rsx] %s backend init %s\n", RSX_BACKEND_NAME,
             rsx_ok ? "OK -- window open" : "FAILED");
@@ -264,9 +273,15 @@ static DWORD WINAPI frame_clock(LPVOID)
     const char* vblank_env = getenv("PAIN_VBLANK_MS");
     const int vblank_req = vblank_env ? atoi(vblank_env) : 16;
     const ULONGLONG vblank_ms = (ULONGLONG)(vblank_req < 4 ? 4 : vblank_req > 33 ? 33 : vblank_req);
+    /* How long the drain loop sleeps when the FIFO is empty and nobody kicks
+     * it. The guest appends commands by storing `put`, which wakes nothing,
+     * so each hand-off of a frame built in pieces can cost this whole wait. */
+    const char* fifo_env = getenv("PAIN_FIFO_WAIT_MS");
+    const int fifo_req = fifo_env ? atoi(fifo_env) : 4;
+    const unsigned fifo_wait_ms = (unsigned)(fifo_req < 0 ? 0 : fifo_req > 16 ? 16 : fifo_req);
 
     for (;;) {
-        if (rsx_ok) cellGcm_fifo_kick_wait(4);
+        if (rsx_ok) cellGcm_fifo_kick_wait(fifo_wait_ms);
         else Sleep(4);
         ULONGLONG now = GetTickCount64();
 
@@ -443,6 +458,8 @@ static void* guest_thread(void* arg)
         render_start_changed.wait(lock, [] { return render_started; });
     }
     guest_run* g = (guest_run*)arg;
+    { const char* e = getenv("PS3_THREAD_QOS");
+      if (e && *e == '1') pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0); }
     g->rc = ppu_run(g->entry, g->stack_top);
     __atomic_store_n(&g->done, 1, __ATOMIC_RELEASE);
     CFRunLoopStop(CFRunLoopGetMain());
