@@ -20,7 +20,7 @@ namespace pain_settings {
 namespace {
 using namespace std::literals;
 
-enum class Kind { toggle, presence, inverted_toggle, number, post_scale, cap, language, size, aa, aniso, aspect };
+enum class Kind { toggle, presence, inverted_toggle, number, post_scale, cap, language, size, aa, aniso, aspect, upscale };
 
 struct Option {
     std::string_view key;
@@ -44,6 +44,8 @@ constexpr std::array options{
     Option{"contrast", "PS3_CONTRAST", "1", Kind::number, .5, 1.5},
     Option{"sharpen", "PS3_SHARPEN", "0", Kind::number, 0, 1},
     Option{"anisotropic", "PS3_ANISO", "0", Kind::aniso},
+    Option{"res_scale", "PS3_RES_SCALE", "1", Kind::number, .5, 3},
+    Option{"upscale", "PS3_UPSCALE", "off", Kind::upscale},
     Option{"language", "PS3_LANG", "auto", Kind::language},
     Option{"audio", "PS3_NO_AUDIO", "on", Kind::presence},
     Option{"metal_headless", "PS3RECOMP_METAL_HEADLESS", "off", Kind::toggle},
@@ -125,6 +127,9 @@ bool normalize(const Option& option, std::string& value)
         return value == "off" || value == "fxaa" || value == "smaa";
     case Kind::aspect:
         return value == "fit" || value == "stretch";
+    case Kind::upscale:
+        if (value == "0") value = "off";
+        return value == "off" || value == "metalfx";
     }
     return false;
 }
