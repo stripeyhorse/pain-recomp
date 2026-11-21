@@ -54,6 +54,7 @@ constexpr std::array options{
     Option{"pin_pose_at_kick", "PAIN_PIN_POSE_AT_KICK", "on", Kind::toggle},
     Option{"creator_first", "PS3_CREATOR_FIRST", "on", Kind::toggle},
     Option{"fifo_park_grace_ms", "GCM_PARK_GRACE_MS", "2000", Kind::number, 0, 60000},
+    Option{"vblank_ms", "PAIN_VBLANK_MS", "8", Kind::number, 4, 33},
 };
 
 std::mutex settings_mutex;

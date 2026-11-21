@@ -249,6 +249,12 @@ static DWORD WINAPI frame_clock(LPVOID)
 
     unsigned  last_flip = 0;
     ULONGLONG next_tick = GetTickCount64();
+    /* PAIN paces itself on the vblank: it waits two of them per frame, which
+     * is 30 FPS on a 60 Hz console. PAIN_VBLANK_MS shortens the synthesized
+     * period (8 gives the game a 120 Hz vblank and a 60 FPS frame). */
+    const char* vblank_env = getenv("PAIN_VBLANK_MS");
+    const int vblank_req = vblank_env ? atoi(vblank_env) : 16;
+    const ULONGLONG vblank_ms = (ULONGLONG)(vblank_req < 4 ? 4 : vblank_req > 33 ? 33 : vblank_req);
 
     for (;;) {
         if (rsx_ok) cellGcm_fifo_kick_wait(4);
@@ -272,7 +278,7 @@ static DWORD WINAPI frame_clock(LPVOID)
              * labels the game's per-frame logic blocks on, so it has to keep
              * advancing at 60 Hz even while present() throttles. */
             if (rsx_ok) cellGcm_rsx_process_fifo();
-            next_tick += 16;             /* ~60 Hz */
+            next_tick += vblank_ms;      /* ~60 Hz by default */
             fired++;
         }
         if (fired >= 240) next_tick = now;   /* fell too far behind -- resync */
