@@ -34,6 +34,7 @@ updates the INI.
 | `fifo_park_grace_ms` | 0 to 60000 | Sets `GCM_PARK_GRACE_MS`. How long the RSX FIFO waits at a parked jump for the game to patch it before following `put`. The toolkit default of 50 ms can skip a fence when the host is busy and stall the game at a ring wrap. Defaults to 2000. |
 | `vblank_ms` | 4 to 33 | Sets `PAIN_VBLANK_MS`. The synthesized vblank period. PAIN waits two vblanks per frame, so 8 targets 60 FPS and 16 is the console's 30 FPS. Launch-to-airborne time measured the same at both. Defaults to 8. |
 | `thread_qos` | on, off | Sets `PS3_THREAD_QOS`. macOS only: runs the SPURS lanes, the RSX thread and the game's main thread at user-interactive QoS so they stay on performance cores. No measured difference on a 4P+4E M2; unmeasured on machines with more efficiency cores. Defaults to on. |
+| `spu_mfc_lookup_cache` | on, off | Sets `SPU_MFC_LOOKUP_CACHE` on macOS. Reuses the SPU worker's last memory-flow controller lookup. Defaults to off. |
 
 INI edits apply at startup. The window presentation settings require the
 toolkit change for Metal and Vulkan. The null backend has no graphics output.
