@@ -22,7 +22,7 @@ bundle="$app/Contents"
 resources="$bundle/Resources"
 frameworks="$bundle/Frameworks"
 helpers="$bundle/Helpers"
-archive="$stage/PAIN-MacBook-0.2.1-arm64.zip"
+archive="$stage/PAIN-MacBook-0.2.2-arm64.zip"
 
 [[ ! -e "$app" && ! -e "$archive" ]]
 mkdir -p "$bundle/MacOS" "$resources/Licences" "$frameworks" "$helpers"
@@ -67,8 +67,8 @@ cat > "$bundle/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key><string>com.stripeyhorse.painrecomp.launcher</string>
     <key>CFBundleName</key><string>PAIN</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.1</string>
-    <key>CFBundleVersion</key><string>20261121.3</string>
+    <key>CFBundleShortVersionString</key><string>0.2.2</string>
+    <key>CFBundleVersion</key><string>20261121.4</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
     <key>LSMinimumSystemVersion</key><string>27.0</string>
     <key>NSHighResolutionCapable</key><true/>

@@ -203,6 +203,10 @@ final class Launcher: NSObject, NSApplicationDelegate {
         process.arguments = [selection.preparedURL.appendingPathComponent("EBOOT.elf").path]
         process.currentDirectoryURL = state
         var environment = ProcessInfo.processInfo.environment
+        // Redirected stderr otherwise enables per-wait tracing in the runtime.
+        environment["PS3_VERBOSE"] = environment["PS3_VERBOSE"] ?? "0"
+        // The guest's SurMixer creates its notification queue before the caller uses its key.
+        environment["PS3_PRIO_START"] = environment["PS3_PRIO_START"] ?? "1"
         environment["PS3_VFS_ROOT"] = selection.discURL.deletingLastPathComponent().path
         environment["PS3_HDD0_ROOT"] = selection.preparedURL.appendingPathComponent("hdd0").path
         let hdd1 = state.appendingPathComponent("hdd1", isDirectory: true)
