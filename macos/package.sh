@@ -3,8 +3,8 @@
 set -euo pipefail
 umask 077
 
-if [[ $# != 5 ]]; then
-    echo "Usage: $0 STAGE VERIFIED_MAC_BUILD SDK_PREFIX PS3_GAME GENERATED_CATALOG" >&2
+if [[ $# != 6 ]]; then
+    echo "Usage: $0 STAGE VERIFIED_MAC_BUILD SDK_PREFIX PS3_GAME GENERATED_CATALOG SHADER_RECIPES" >&2
     exit 2
 fi
 
@@ -16,13 +16,14 @@ runner="$2"
 prefix="$3"
 disc="$4"
 catalog="$5"
+recipes="$6"
 deps="$stage/deps"
 app="$stage/PAIN.app"
 bundle="$app/Contents"
 resources="$bundle/Resources"
 frameworks="$bundle/Frameworks"
 helpers="$bundle/Helpers"
-archive="$stage/PAIN-MacBook-0.2.2-arm64.zip"
+archive="$stage/PAIN-MacBook-0.2.3-arm64.zip"
 
 [[ ! -e "$app" && ! -e "$archive" ]]
 mkdir -p "$bundle/MacOS" "$resources/Licences" "$frameworks" "$helpers"
@@ -40,6 +41,7 @@ codesign --verify --deep --strict "$helpers/RPCS3.app"
 install -m 644 "$here/game_data.py" "$port/scripts/extract_cache.py" \
     "$toolkit/tools/lift_prx.py" "$resources/"
 "$resources/Python/bin/python3" -B "$resources/game_data.py" manifest "$disc" "$catalog" "$resources/disc.json"
+install -m 644 "$recipes" "$resources/shader-recipes.bin"
 
 install -m 644 "$port/LICENSE" "$resources/Licences/pain-recomp.txt"
 install -m 644 "$toolkit/LICENSE" "$resources/Licences/ps3recomp.txt"
@@ -67,8 +69,8 @@ cat > "$bundle/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key><string>com.stripeyhorse.painrecomp.launcher</string>
     <key>CFBundleName</key><string>PAIN</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.2</string>
-    <key>CFBundleVersion</key><string>20261121.4</string>
+    <key>CFBundleShortVersionString</key><string>0.2.3</string>
+    <key>CFBundleVersion</key><string>20261121.5</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
     <key>LSMinimumSystemVersion</key><string>27.0</string>
     <key>NSHighResolutionCapable</key><true/>

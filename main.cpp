@@ -55,6 +55,8 @@
 
 #if defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>   /* the main thread's run loop, see run_guest */
+#include <condition_variable>
+#include <mutex>
 #include <pthread.h>
 #endif
 
@@ -217,6 +219,18 @@ static void present_guest_frame(void)
     InterlockedIncrement(&g_frames_presented);
 }
 
+#if defined(__APPLE__)
+static std::mutex render_start_mutex;
+static std::condition_variable render_start_changed;
+static bool render_started;
+
+static bool preparing_shader_recipes()
+{
+    const char* recipes = getenv("PS3RECOMP_SHADER_RECIPES");
+    return recipes && *recipes;
+}
+#endif
+
 static DWORD WINAPI frame_clock(LPVOID)
 {
     const char* title = getenv("PS3_TITLE");
@@ -225,6 +239,13 @@ static DWORD WINAPI frame_clock(LPVOID)
     int rsx_ok = (rsx_backend_init(WINDOW_WIDTH, WINDOW_HEIGHT, title) == 0);
     fprintf(stderr, "[rsx] %s backend init %s\n", RSX_BACKEND_NAME,
             rsx_ok ? "OK -- window open" : "FAILED");
+#if defined(__APPLE__)
+    {
+        std::lock_guard lock(render_start_mutex);
+        render_started = true;
+    }
+    render_start_changed.notify_one();
+#endif
 
     unsigned  last_flip = 0;
     ULONGLONG next_tick = GetTickCount64();
@@ -393,6 +414,10 @@ struct guest_run { uint32_t entry, stack_top; int rc; volatile int done; };
 
 static void* guest_thread(void* arg)
 {
+    if (preparing_shader_recipes()) {
+        std::unique_lock lock(render_start_mutex);
+        render_start_changed.wait(lock, [] { return render_started; });
+    }
     guest_run* g = (guest_run*)arg;
     g->rc = ppu_run(g->entry, g->stack_top);
     __atomic_store_n(&g->done, 1, __ATOMIC_RELEASE);
@@ -480,7 +505,10 @@ int main(int argc, char** argv)
     /* Install the guest-callback hook, then start the frame clock. It no-ops
      * until the title registers its vblank and flip handlers during init. */
     g_ps3_guest_caller = harness_guest_caller;
-    CreateThread(NULL, 4u * 1024 * 1024, frame_clock, NULL, 0, NULL);
+    if (!CreateThread(NULL, 4u * 1024 * 1024, frame_clock, NULL, 0, NULL)) {
+        fprintf(stderr, "[boot] could not start the renderer thread\n");
+        return 1;
+    }
 
     printf("\n[boot] dispatching entry OPD 0x%08X (stack top 0x%08X)\n\n",
            entry, STACK_TOP);

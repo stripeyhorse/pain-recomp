@@ -28,6 +28,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private var selection: Selection?
     private var activeProcess: Process?
     private var currentLog: URL?
+    private var shaderProgressTimer: Timer?
+    private var shaderProgressOffset: UInt64 = 0
 
     private lazy var state: URL = {
         if let override = ProcessInfo.processInfo.environment["PAIN_PREVIEW_DATA_DIR"] {
@@ -209,6 +211,19 @@ final class Launcher: NSObject, NSApplicationDelegate {
         environment["PS3_PRIO_START"] = environment["PS3_PRIO_START"] ?? "1"
         environment["PS3_VFS_ROOT"] = selection.discURL.deletingLastPathComponent().path
         environment["PS3_HDD0_ROOT"] = selection.preparedURL.appendingPathComponent("hdd0").path
+        let recipes = resources.appendingPathComponent("shader-recipes.bin")
+        let prepareShaders = files.isReadableFile(atPath: recipes.path) &&
+            environment["PAIN_PREPARE_SHADERS"] != "0"
+        if prepareShaders {
+            environment["PS3RECOMP_SHADER_RECIPES"] = recipes.path
+            environment["PS3RECOMP_SHADER_GAME_DIR"] = selection.preparedURL
+                .appendingPathComponent("hdd0/game/BCES00548/USRDIR", isDirectory: true).path
+            let cache = state.appendingPathComponent("Shader Cache/MSL", isDirectory: true)
+            if (try? files.createDirectory(at: cache, withIntermediateDirectories: true,
+                                           attributes: [.posixPermissions: 0o700])) != nil {
+                environment["PS3RECOMP_MSL_CACHE"] = environment["PS3RECOMP_MSL_CACHE"] ?? cache.path
+            }
+        }
         let hdd1 = state.appendingPathComponent("hdd1", isDirectory: true)
         do {
             try files.createDirectory(at: hdd1, withIntermediateDirectories: true,
@@ -229,8 +244,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
         process.environment = environment
         let began = Date()
         let log = logs.appendingPathComponent("game.log")
-        statusLabel.stringValue = "PAIN is running."
-        start(process, loggingTo: log, showProgress: false) { [weak self] task in
+        statusLabel.stringValue = prepareShaders ? "Preparing shaders…" : "PAIN is starting…"
+        start(process, loggingTo: log, showProgress: prepareShaders) { [weak self] task in
             guard let self else { return }
             if task.terminationStatus != 0 || Date().timeIntervalSince(began) < 10 {
                 self.statusLabel.stringValue = "PAIN closed during launch or play (code \(task.terminationStatus)). Open the log for details."
@@ -239,6 +254,36 @@ final class Launcher: NSObject, NSApplicationDelegate {
             }
             self.window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+        }
+        if activeProcess === process {
+            shaderProgressOffset = 0
+            shaderProgressTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) {
+                [weak self] timer in
+                guard let self, let handle = try? FileHandle(forReadingFrom: log) else { return }
+                defer { try? handle.close() }
+                do {
+                    try handle.seek(toOffset: self.shaderProgressOffset)
+                    let data = try handle.read(upToCount: 65_536) ?? Data()
+                    guard let newline = data.lastIndex(of: 10) else {
+                        if data.count == 65_536 { self.shaderProgressOffset += UInt64(data.count) }
+                        return
+                    }
+                    self.shaderProgressOffset += UInt64(newline + 1)
+                    let lines = String(decoding: data[...newline], as: UTF8.self)
+                        .split(whereSeparator: \.isNewline)
+                    if let result = lines.first(where: { $0.hasPrefix("[rsx] Metal backend init") }) {
+                        self.statusLabel.stringValue = result.contains("OK -- window open")
+                            ? "PAIN is running." : "PAIN couldn't start Metal. Open the log for details."
+                        self.progress.stopAnimation(nil)
+                        timer.invalidate()
+                        self.shaderProgressTimer = nil
+                    } else if let line = lines.last(where: { $0.hasPrefix("[shader-prep] Preparing shaders") }) {
+                        self.statusLabel.stringValue = String(line.dropFirst("[shader-prep] ".count)) + "…"
+                    }
+                } catch {
+                    // The game log remains available even if reading progress fails.
+                }
+            }
         }
     }
 
@@ -261,6 +306,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.activeProcess = nil
+                    self.shaderProgressTimer?.invalidate()
+                    self.shaderProgressTimer = nil
                     self.progress.stopAnimation(nil)
                     self.updateButtons()
                     finished(task)
