@@ -204,6 +204,11 @@ elseif(PORT_ENABLE_SPU)
         foreach(gen IN ITEMS spu_workloads.c jobmods_register.c taskset_policy_bytes.c pm_reg.c)
             if(EXISTS "${SPU_DIR}/${gen}")
                 list(APPEND SPU_SOURCES "${SPU_DIR}/${gen}")
+            elseif(gen STREQUAL "jobmods_register.c")
+                # Without the job-module lift every SPURS job runs in the SPU
+                # interpreter: 2-4 FPS in play and broken audio. It builds and
+                # boots, so fail here rather than ship that.
+                message(FATAL_ERROR "Missing ${SPU_DIR}/${gen}. Run scripts/lift_jobmods.sh.")
             else()
                 message(STATUS "  (no ${gen} -- not registered)")
             endif()
