@@ -330,7 +330,13 @@ final class Launcher: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showLog() {
-        NSWorkspace.shared.open(currentLog ?? logs)
+        // Reveal the file: the game log is too large to open comfortably and
+        // players need to be able to copy it somewhere.
+        if let log = currentLog, files.fileExists(atPath: log.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([log])
+        } else {
+            NSWorkspace.shared.open(logs)
+        }
     }
 }
 
