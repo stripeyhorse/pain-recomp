@@ -57,6 +57,7 @@ constexpr std::array options{
     Option{"creator_first", "PS3_CREATOR_FIRST", "on", Kind::toggle},
     Option{"fifo_park_grace_ms", "GCM_PARK_GRACE_MS", "2000", Kind::number, 0, 60000},
     Option{"vblank_ms", "PAIN_VBLANK_MS", "8", Kind::number, 4, 33},
+    Option{"sim_steps", "PAIN_SIM_STEPS", "2", Kind::number, 1, 2},
     Option{"thread_qos", "PS3_THREAD_QOS", "on", Kind::toggle},
 #if defined(__APPLE__)
     Option{"spu_mfc_lookup_cache", "SPU_MFC_LOOKUP_CACHE", "off", Kind::toggle},

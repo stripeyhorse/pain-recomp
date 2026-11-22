@@ -12,7 +12,8 @@ check_deploy_inputs() {
     for input in "$deploy_game/PARAM.SFO" "$deploy_game/USRDIR/EBOOT.elf" \
         "$deploy_cache/CacheFlags/CacheDone.flg" "$deploy_catalog/catalog.inc" \
         "$deploy_port/recompiled/ppu_recomp.h" "$deploy_port/recompiled/ppu_hle_nids.cpp" \
-        "$deploy_port/recompiled/prepared/wrapped_sources.txt" "$deploy_port/spu/pm_reg.c" \
+        "$deploy_port/recompiled/prepared/wrapped_sources.txt" \
+        "$deploy_port/recompiled/prepared/sim_steps_driver.cpp" "$deploy_port/spu/pm_reg.c" \
         "$deploy_port/spu/jobmods_register.c"; do
         if [[ ! -s "$input" ]]; then
             printf 'Missing %s. Prepare the build inputs on the workstation first.\n' "$input" >&2

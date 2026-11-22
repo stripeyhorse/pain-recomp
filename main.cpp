@@ -40,6 +40,7 @@
 #include "unlock_trainer.h"
 #include "save_art.h"
 #include "pose_pin.h"
+#include "sim_steps.h"
 #include "win32_compat.h"
 
 #include <stdint.h>
@@ -270,13 +271,21 @@ static DWORD WINAPI frame_clock(LPVOID)
 #endif
 
     unsigned  last_flip = 0;
-    ULONGLONG next_tick = GetTickCount64();
+    /* The beat clock runs in microseconds so the period can be fractional. */
+    const auto tick_us = [] {
+        return (ULONGLONG)std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    };
+    ULONGLONG next_tick = tick_us();
     /* PAIN paces itself on the vblank: it waits two of them per frame, which
      * is 30 FPS on a 60 Hz console. PAIN_VBLANK_MS shortens the synthesized
-     * period (8 gives the game a 120 Hz vblank and a 60 FPS frame). */
+     * period (8 gives the game a 125 Hz vblank and up to 62.5 FPS; 8.333 is
+     * 120 Hz and 60 FPS). Fractional milliseconds are honoured. */
     const char* vblank_env = getenv("PAIN_VBLANK_MS");
-    const int vblank_req = vblank_env ? atoi(vblank_env) : 16;
-    const ULONGLONG vblank_ms = (ULONGLONG)(vblank_req < 4 ? 4 : vblank_req > 33 ? 33 : vblank_req);
+    double vblank_req = vblank_env ? strtod(vblank_env, NULL) : 16.0;
+    if (!(vblank_req >= 4.0)) vblank_req = 4.0;
+    if (vblank_req > 33.0) vblank_req = 33.0;
+    const ULONGLONG vblank_us = (ULONGLONG)(vblank_req * 1000.0 + 0.5);
     /* How long the drain loop sleeps when the FIFO is empty and nobody kicks
      * it. The guest appends commands by storing `put`, which wakes nothing,
      * so each hand-off of a frame built in pieces can cost this whole wait. */
@@ -294,19 +303,19 @@ static DWORD WINAPI frame_clock(LPVOID)
     const char* timer_env = getenv("PS3_VBLANK_TIMER");
     const bool vblank_timer = !(timer_env && *timer_env == '0');
     if (vblank_timer) {
-        std::thread([deadline = next_tick, vblank_ms]() mutable {
+        std::thread([deadline = next_tick, vblank_us, tick_us]() mutable {
             ps3_thread_name("vblank");
             for (;;) {
-                const ULONGLONG now = GetTickCount64();
+                const ULONGLONG now = tick_us();
                 if ((long long)(now - deadline) < 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(deadline - now));
+                    std::this_thread::sleep_for(std::chrono::microseconds(deadline - now));
                     continue;
                 }
                 /* One vblank per beat passed, as the loop below counts them. */
                 unsigned beats = 0;
                 while ((long long)(now - deadline) >= 0 && beats < 240) {
                     cellGcmTickVBlank();
-                    deadline += vblank_ms;
+                    deadline += vblank_us;
                     beats++;
                 }
                 if (beats >= 240) deadline = now;   /* fell too far behind -- resync */
@@ -317,7 +326,7 @@ static DWORD WINAPI frame_clock(LPVOID)
     for (;;) {
         if (rsx_ok) cellGcm_fifo_kick_wait(fifo_wait_ms);
         else Sleep(4);
-        ULONGLONG now = GetTickCount64();
+        ULONGLONG now = tick_us();
 
         int fired = 0;
         while ((long long)(now - next_tick) >= 0 && fired < 240) {
@@ -336,7 +345,7 @@ static DWORD WINAPI frame_clock(LPVOID)
              * labels the game's per-frame logic blocks on, so it has to keep
              * advancing at 60 Hz even while present() throttles. */
             if (rsx_ok) cellGcm_rsx_process_fifo();
-            next_tick += vblank_ms;      /* ~60 Hz by default */
+            next_tick += vblank_us;      /* ~60 Hz by default */
             fired++;
         }
         if (fired >= 240) next_tick = now;   /* fell too far behind -- resync */
@@ -576,6 +585,7 @@ int main(int argc, char** argv)
     ppu_recomp_register();   /* lifted function table -> address map */
     pain_save_art::load(ppu_vfs_root);
     install_unlock_trainer();
+    install_sim_steps();
     pain_settings::install_native_hooks();
     ps3_load_prx_modules();  /* this game's lifted system PRX, if it has any */
     ppu_hle_init();          /* firmware import NID -> HLE handlers */

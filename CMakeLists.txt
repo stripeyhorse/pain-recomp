@@ -97,6 +97,11 @@ foreach(entry IN LISTS pain_wrapped_chunks)
     list(REMOVE_ITEM RECOMP_SOURCES "${RECOMP_DIR}/${chunk}")
     list(APPEND RECOMP_SOURCES "${pain_wrapped_dir}/wrapped_${chunk}")
 endforeach()
+# The sim_steps=1 copy of the frame driver (prepare_ppu.cmake, sim_steps.cpp).
+if(NOT EXISTS "${pain_wrapped_dir}/sim_steps_driver.cpp")
+    message(FATAL_ERROR "Missing ${pain_wrapped_dir}/sim_steps_driver.cpp. Rerun prepare_deploy.sh.")
+endif()
+list(APPEND RECOMP_SOURCES "${pain_wrapped_dir}/sim_steps_driver.cpp")
 
 list(LENGTH RECOMP_SOURCES RECOMP_SOURCE_COUNT)
 message(STATUS "Lifted sources:  ${RECOMP_SOURCE_COUNT} file(s)")
@@ -272,6 +277,7 @@ add_executable(${PROJECT_NAME}
     unlock_trainer.cpp
     save_art.cpp
     pose_pin.cpp
+    sim_steps.cpp
     prx/levelscript_reg.cpp
     ${LEVELSCRIPT_SOURCES}
     ${PS3RECOMP_SCAFFOLD}
