@@ -101,6 +101,21 @@ endforeach()
 if(NOT EXISTS "${pain_wrapped_dir}/sim_steps_driver.cpp")
     message(FATAL_ERROR "Missing ${pain_wrapped_dir}/sim_steps_driver.cpp. Rerun prepare_deploy.sh.")
 endif()
+# Its first line names the chunk and lift it was generated from. A prepared copy
+# must match the lifted chunk and the wrapped chunk list next to it.
+file(STRINGS "${pain_wrapped_dir}/sim_steps_driver.cpp" pain_driver_stamp LIMIT_COUNT 1)
+if(NOT pain_driver_stamp MATCHES "^// pain-sim-steps-driver (ppu_recomp_[0-9]+\\.cpp) ([0-9a-f]+) ([0-9a-f]+)$")
+    message(FATAL_ERROR "${pain_wrapped_dir}/sim_steps_driver.cpp has no generator stamp. Rerun prepare_deploy.sh.")
+endif()
+set(pain_driver_chunk "${CMAKE_MATCH_1}")
+set(pain_driver_chunk_hash "${CMAKE_MATCH_2}")
+file(SHA256 "${RECOMP_DIR}/${pain_driver_chunk}" pain_driver_actual_hash)
+if(NOT pain_driver_actual_hash STREQUAL pain_driver_chunk_hash
+        OR NOT "${pain_driver_chunk} ${pain_driver_chunk_hash}" IN_LIST pain_wrapped_chunks)
+    message(FATAL_ERROR "${pain_wrapped_dir}/sim_steps_driver.cpp was generated from another "
+        "${pain_driver_chunk} than the one in ${RECOMP_DIR} or in wrapped_sources.txt. Rerun prepare_deploy.sh "
+        "and copy the whole recompiled/prepared directory.")
+endif()
 list(APPEND RECOMP_SOURCES "${pain_wrapped_dir}/sim_steps_driver.cpp")
 
 list(LENGTH RECOMP_SOURCES RECOMP_SOURCE_COUNT)
