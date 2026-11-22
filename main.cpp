@@ -48,6 +48,7 @@
 #include <string.h>
 #include <chrono>
 #include <thread>
+#include "ps3emu/thread_name.h"   /* every platform; a no-op where there is no API */
 
 #include "ps3emu/thread_name.h"   /* ps3_thread_name, every platform */
 
@@ -283,6 +284,36 @@ static DWORD WINAPI frame_clock(LPVOID)
     const int fifo_req = fifo_env ? atoi(fifo_env) : 4;
     const unsigned fifo_wait_ms = (unsigned)(fifo_req < 0 ? 0 : fifo_req > 16 ? 16 : fifo_req);
 
+    /* The guest vblank is published by a clock of its own, on the same
+     * deadlines this loop ticks. Published here, a beat waited for whatever
+     * drain or present was in progress -- most of a heavy frame -- and the
+     * game, which paces itself on its vblank callbacks, saw them late and in
+     * bunches. The flip tick, the drain and presentation stay on this thread
+     * in their existing order; delivery stays with the callback pump.
+     * PS3_VBLANK_TIMER=0 publishes from this loop again. */
+    const char* timer_env = getenv("PS3_VBLANK_TIMER");
+    const bool vblank_timer = !(timer_env && *timer_env == '0');
+    if (vblank_timer) {
+        std::thread([deadline = next_tick, vblank_ms]() mutable {
+            ps3_thread_name("vblank");
+            for (;;) {
+                const ULONGLONG now = GetTickCount64();
+                if ((long long)(now - deadline) < 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(deadline - now));
+                    continue;
+                }
+                /* One vblank per beat passed, as the loop below counts them. */
+                unsigned beats = 0;
+                while ((long long)(now - deadline) >= 0 && beats < 240) {
+                    cellGcmTickVBlank();
+                    deadline += vblank_ms;
+                    beats++;
+                }
+                if (beats >= 240) deadline = now;   /* fell too far behind -- resync */
+            }
+        }).detach();
+    }
+
     for (;;) {
         if (rsx_ok) cellGcm_fifo_kick_wait(fifo_wait_ms);
         else Sleep(4);
@@ -290,7 +321,7 @@ static DWORD WINAPI frame_clock(LPVOID)
 
         int fired = 0;
         while ((long long)(now - next_tick) >= 0 && fired < 240) {
-            cellGcmTickVBlank();
+            if (!vblank_timer) cellGcmTickVBlank();
             cellGcmTickFlip();
             /* Present a pending flip BEFORE draining any further. The flip
              * fires at a get==put frame boundary on the guest thread, so the
