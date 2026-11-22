@@ -35,6 +35,7 @@ updates the INI.
 | `vblank_ms` | 4 to 33 | Sets `PAIN_VBLANK_MS`. The synthesized vblank period. PAIN waits two vblanks per frame, so 8 targets 60 FPS and 16 is the console's 30 FPS. Launch-to-airborne time measured the same at both. Defaults to 8. |
 | `thread_qos` | on, off | Sets `PS3_THREAD_QOS`. macOS only: runs the SPURS lanes, the RSX thread and the game's main thread at user-interactive QoS so they stay on performance cores. No measured difference on a 4P+4E M2; unmeasured on machines with more efficiency cores. Defaults to on. |
 | `spu_mfc_lookup_cache` | on, off | Sets `SPU_MFC_LOOKUP_CACHE` on macOS. Reuses the SPU worker's last memory-flow controller lookup. Defaults to off. |
+| `mesh_lanes` | 1 to 6 | Sets `PS3_SPURS_LANES_OF_2`. Host threads serving the game's two-SPU SPURS instance, which runs the ICE Mesh geometry jobs. 2 is what the game asked for. 3 or 4 share the same job lists between more threads; on a 4P+4E M2 three threads all took work and the frame did not change, because the performance cores were already full. Defaults to 2. |
 
 INI edits apply at startup. The window presentation settings require the
 toolkit change for Metal and Vulkan. The null backend has no graphics output.

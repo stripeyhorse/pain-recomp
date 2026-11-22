@@ -61,6 +61,7 @@ constexpr std::array options{
 #if defined(__APPLE__)
     Option{"spu_mfc_lookup_cache", "SPU_MFC_LOOKUP_CACHE", "off", Kind::toggle},
 #endif
+    Option{"mesh_lanes", "PS3_SPURS_LANES_OF_2", "2", Kind::number, 1, 6},
 };
 
 std::mutex settings_mutex;
