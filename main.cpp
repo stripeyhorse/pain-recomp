@@ -127,6 +127,8 @@ int      cellGcm_take_flip_pending(void);
 void     cellGcm_rsx_process_fifo(void);      /* drain get -> put */
 void     cellGcm_fifo_kick_wait(unsigned ms); /* wake early for a pending fence */
 unsigned cellGcm_flip_request_count(void);
+void     cellGcm_set_vblank_observer(void (*)(uint32_t opd, uint32_t count,
+                                          uint32_t burst_index, uint32_t age_us));
 }
 
 /* ---------------------------------------------------------------------------
@@ -301,9 +303,43 @@ static DWORD WINAPI frame_clock(LPVOID)
      * PS3_VBLANK_TIMER=0 publishes from this loop again. */
     const char* timer_env = getenv("PS3_VBLANK_TIMER");
     const bool vblank_timer = !(timer_env && *timer_env == '0');
+
+    /* PS3_VBLANK_STATS=1 (diagnostics): did the game count each vblank into a
+     * live frame? PAIN's handler (descriptor 0x00BC1DD8 -> 0x00198A50) adds
+     * one to the game's vblank counter (the word at TOC 0x00BFD2C8 - 0x1910
+     * points to it) and posts the frame semaphore once it passes 1; the frame
+     * resets it to 0 when its wait returns. A count of 3 or more after a
+     * callback is a vblank the game threw away -- it came after the post and
+     * before the frame took it -- and some frame ran a whole vblank long. By
+     * cause: delivered in the same pump right behind the post ("in_burst"),
+     * delivered more than a vblank late ("late"), or neither: the frame itself
+     * was still busy ("frame_late"). Above 8 the game is not pacing on it
+     * (loading). The toolkit prints its own [vblank] line beside this one. */
+    static volatile LONG pain_cb, pain_wasted, pain_burst, pain_late, pain_idle;   /* interlocked */
+    static uint32_t pain_late_us;
+    const char* stats_env = getenv("PS3_VBLANK_STATS");
+    const bool pain_stats = stats_env && *stats_env && *stats_env != '0';
+    if (pain_stats) {
+        pain_late_us = (uint32_t)vblank_us;
+        cellGcm_set_vblank_observer([](uint32_t opd, uint32_t, uint32_t burst, uint32_t age_us) {
+            if (opd != 0x00BC1DD8u || !vm_base) return;
+            const uint32_t counter = vm_read32(0x00BFD2C8u - 0x1910u);
+            if (!counter) return;
+            const uint32_t c = vm_read32(counter);
+            InterlockedIncrement(&pain_cb);
+            if (c > 8) { InterlockedIncrement(&pain_idle); return; }
+            if (c < 3) return;
+            InterlockedIncrement(&pain_wasted);
+            if (burst) InterlockedIncrement(&pain_burst);
+            else if (age_us > pain_late_us) InterlockedIncrement(&pain_late);
+        });
+    }
+
     if (vblank_timer) {
-        std::thread([deadline = next_tick, vblank_us, tick_us]() mutable {
+        std::thread([deadline = next_tick, vblank_us, tick_us, pain_stats]() mutable {
             ps3_thread_name("vblank");
+            const unsigned stats_every = (unsigned)(10000000ull / vblank_us);
+            unsigned stats_beats = 0;
             for (;;) {
                 const ULONGLONG now = tick_us();
                 if ((long long)(now - deadline) < 0) {
@@ -316,6 +352,13 @@ static DWORD WINAPI frame_clock(LPVOID)
                     cellGcmTickVBlank();
                     deadline += vblank_us;
                     beats++;
+                    if (pain_stats && ++stats_beats % stats_every == 0) {
+                        const unsigned w = (unsigned)pain_wasted, b = (unsigned)pain_burst,
+                                       l = (unsigned)pain_late;
+                        fprintf(stderr, "[vblank-pain] callbacks=%u wasted=%u in_burst=%u late=%u "
+                                "frame_late=%u not_pacing=%u\n", (unsigned)pain_cb, w, b, l,
+                                w - b - l, (unsigned)pain_idle);
+                    }
                 }
                 if (beats >= 240) deadline = now;   /* fell too far behind -- resync */
             }
