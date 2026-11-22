@@ -193,6 +193,38 @@ elseif(PORT_ENABLE_SPU)
     if(SPU_LIFTED)
         list(LENGTH SPU_LIFTED SPU_IMAGE_COUNT)
         message(STATUS "Lifted SPU:      ${SPU_IMAGE_COUNT} image(s)")
+        # PAIN_SPU_NATIVE_PATCHES: the ICE mesh and MainSpurs culling images are compiled
+        # from a copy with native loops attached (scripts/spu_native_patch.py, spu_native/).
+        # The lifted loops stay in it and run when a native guard fails or PAIN_SPU_NATIVE=0.
+        # Default on ARM64, where the native loops exist; elsewhere they compile out.
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64)$")
+            set(pain_native_default ON)
+        else()
+            set(pain_native_default OFF)
+        endif()
+        option(PAIN_SPU_NATIVE_PATCHES "Attach the native SPU loops in spu_native/ to the lifted ICE mesh and culling images" ${pain_native_default})
+        set(SPU_NATIVE_SOURCES "")
+        if(PAIN_SPU_NATIVE_PATCHES)
+            find_package(Python3 COMPONENTS Interpreter REQUIRED)
+            file(GLOB pain_native_deps CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/spu_native/*.h"
+                                                         "${CMAKE_CURRENT_SOURCE_DIR}/spu_native/*.inc")
+            foreach(image IN ITEMS jobmod_ca71f23d7b11_e11B00 jobmod_fee160dc063c_e0F78)
+                set(lifted "${SPU_DIR}/${image}/spu_recomp.c")
+                if(NOT lifted IN_LIST SPU_LIFTED)
+                    continue()
+                endif()
+                set(patched "${CMAKE_CURRENT_BINARY_DIR}/spu_native/${image}/spu_recomp.c")
+                add_custom_command(OUTPUT "${patched}"
+                    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/spu_native_patch.py"
+                            "${image}" "${lifted}" "${patched}"
+                    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/spu_native_patch.py" "${lifted}" ${pain_native_deps}
+                    COMMENT "Attaching native SPU loops to ${image}"
+                    VERBATIM)
+                list(REMOVE_ITEM SPU_LIFTED "${lifted}")
+                list(APPEND SPU_LIFTED "${patched}")
+                list(APPEND SPU_NATIVE_SOURCES "${patched}")
+            endforeach()
+        endif()
         # The musttail indirect-branch fast path. Excluded from the runtime
         # library on purpose (see the SDK root CMakeLists): it must be built
         # here, by clang, or the tail call degrades to a plain call and a guest
@@ -268,6 +300,27 @@ if(SPU_SOURCES)
     if(NOT MSVC OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         set_source_files_properties(${SPU_SOURCES} PROPERTIES COMPILE_OPTIONS "${PAIN_SPU_OPT}")
     endif()
+    # PS3RECOMP_SPU_FLOAT_RZ_ONLY and PS3RECOMP_SPU_LS_DIRECT (ps3recomp CMakeLists.txt). The SPURS
+    # job and policy modules are the private-local-store images: they only ever run in a SPURS
+    # context with its own local store, never as a raw SPU.
+    set(pain_private_ls "")
+    foreach(src IN LISTS SPU_LIFTED)
+        get_filename_component(dir "${src}" DIRECTORY)
+        get_filename_component(image "${dir}" NAME)
+        if(image MATCHES "^(jobmod_|pm_)")
+            list(APPEND pain_private_ls "${image}")
+        endif()
+    endforeach()
+    if(COMMAND ps3recomp_spu_lifted_options)
+        ps3recomp_spu_lifted_options("${SPU_LIFTED}" PRIVATE_LS ${pain_private_ls})
+    endif()
+    # The patched copies live in the build tree: their spu_recomp.h stays beside the lift.
+    foreach(patched IN LISTS SPU_NATIVE_SOURCES)
+        get_filename_component(image_dir "${patched}" DIRECTORY)
+        get_filename_component(image "${image_dir}" NAME)
+        set_property(SOURCE "${patched}" APPEND PROPERTY INCLUDE_DIRECTORIES
+                     "${SPU_DIR}/${image}" "${CMAKE_CURRENT_SOURCE_DIR}/spu_native")
+    endforeach()
 endif()
 
 # app.rc carries the icon, the version block and the manifest, and needs a

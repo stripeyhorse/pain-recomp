@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""Attach PAIN's native SPU loops (spu_native/) to a lifted image's spu_recomp.c.
+
+  spu_native_patch.py <image> <lifted spu_recomp.c> <output .c> [--fixture]
+
+The output is the whole lifted translation unit with the native loop called in front of the
+lifted one; the lifted loop and every interrupt continuation stay as they are. Each patched
+function is pinned by the SHA-256 of its lifted text: a re-lift that changes one fails here,
+because the native loop's contract (registers, local-store layout, interrupt pcs) was checked
+against that text. Re-check spu_native/*.inc against the new lift and update the digest.
+
+--fixture writes, instead of the TU, the original and the patched function as stock_<pc> and
+native_<pc> with interrupt tests routed through pain_native_interrupt, for
+tests/spu_native_fixture.c.
+"""
+import argparse
+import hashlib
+import re
+import sys
+from pathlib import Path
+
+PATCHES = {
+    "jobmod_ca71f23d7b11_e11B00": [{
+        "function": "00007D70",
+        "sha256": "b878df660e45edef7b5b5d37677719c52554e4c5bc06f8b7f8f20b63b5ddc057",
+        "include": "ice_index_table.inc",
+        "edits": [(
+            "        ctx->gpr[7] = spu_il(0);\nloc_00007D9C:\n",
+            "        ctx->gpr[7] = spu_il(0);\n        pain_native_index_table(ctx);\nloc_00007D9C:\n",
+        )],
+    }],
+    "jobmod_fee160dc063c_e0F78": [{
+        "function": "00004630",
+        "sha256": "309f3df9a0a5ac587f8fa21d42a6db008d63ba697a3b6eecfe11246a39cbc96d",
+        "include": "cull_plane_loop.inc",
+        "edits": [(
+            "        goto loc_000046C0;\n",
+            """#if defined(__aarch64__) && defined(__ARM_NEON) && !defined(SPU_SCALAR_HELPERS)
+        switch (pain_native_cull_loop(ctx)) {
+        case PAIN_CULL_LIFTED_FINISH: goto loc_00004664;
+        case PAIN_CULL_LIFTED_REJECT: goto pain_cull_lifted_reject;
+        case PAIN_CULL_INTERRUPT_BEFORE_PLANE:
+            ctx->pc = 0x46C0; g_spu_trampoline_fn = {prefix}000046C0; return;
+        case PAIN_CULL_INTERRUPT_BEFORE_SELECT:
+            ctx->pc = 0x46B0; g_spu_trampoline_fn = {prefix}000046B0; return;
+        case PAIN_CULL_LIFTED_LOOP: break;
+        }
+#endif
+        goto loc_000046C0;
+""",
+        ), (
+            "        ctx->gpr[2] = spu_il(2);\n",
+            """#if defined(__aarch64__) && defined(__ARM_NEON) && !defined(SPU_SCALAR_HELPERS)
+pain_cull_lifted_reject:
+#endif
+        ctx->gpr[2] = spu_il(2);
+""",
+        )],
+    }],
+}
+
+HELPERS = '#include "../../runtime/spu/spu_helpers.h"\n'
+PENDING = re.compile(r"ctx->int_enable && \(ctx->event_status & ctx->event_mask\)(?=\) \{ ctx->pc = (0x[0-9A-F]+);)")
+
+
+def function_span(code, name):
+    start = code.find(f"void {name}(spu_context* ctx) {{")
+    if start < 0:
+        raise SystemExit(f"{name} not found in the lift")
+    return start, code.index("\n}", start) + 2
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("image")
+    ap.add_argument("source", type=Path)
+    ap.add_argument("output", type=Path)
+    ap.add_argument("--fixture", action="store_true")
+    args = ap.parse_args()
+    if args.image not in PATCHES:
+        raise SystemExit(f"no native patches for {args.image}")
+    code = args.source.read_text()
+    prefix = f"{args.image}_spu_func_"
+    includes = ['#include "spu_native.h"\n']
+    fixture = []
+    for patch in PATCHES[args.image]:
+        name = prefix + patch["function"]
+        start, stop = function_span(code, name)
+        body = code[start:stop]
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        if digest != patch["sha256"]:
+            raise SystemExit(f"{args.source}: {name} changed (sha256 {digest}); re-check "
+                             f"spu_native/{patch['include']} against the new lift")
+        native = body
+        for old, new in patch["edits"]:
+            if native.count(old) < 1:
+                raise SystemExit(f"{name}: anchor not found: {old!r}")
+            native = native.replace(old, new.replace("{prefix}", prefix), 1)
+        includes.append(f'#include "{patch["include"]}"\n')
+        if args.fixture:
+            stock = PENDING.sub(r"pain_native_interrupt(ctx, \1)", body)
+            lifted = PENDING.sub(r"pain_native_interrupt(ctx, \1)", native)
+            continuations = sorted(set(re.findall(r"g_spu_trampoline_fn = (\w+);", body)))
+            fixture.append("\n".join(f"static void {fn}(spu_context* ctx) {{ (void)ctx; }}" for fn in continuations))
+            fixture.append(stock.replace(name + "(", f"stock_{patch['function']}("))
+            fixture.append(lifted.replace(name + "(", f"native_{patch['function']}("))
+        else:
+            code = code[:start] + native + code[stop:]
+    if args.fixture:
+        out = "".join(includes) + "\n" + "\n\n".join(fixture) + "\n"
+    else:
+        if code.count(HELPERS) != 1:
+            raise SystemExit(f"{args.source}: expected one {HELPERS.strip()}")
+        out = ("/* Generated by scripts/spu_native_patch.py from " + str(args.source) + " -- do not edit. */\n" +
+               code.replace(HELPERS, '#include "spu_helpers.h"\n' + "".join(includes)))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    tmp = args.output.with_suffix(".tmp")
+    tmp.write_text(out)
+    tmp.replace(args.output)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
