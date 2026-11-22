@@ -49,6 +49,8 @@
 #include <chrono>
 #include <thread>
 
+#include "ps3emu/thread_name.h"   /* ps3_thread_name, every platform */
+
 #ifndef _WIN32
 #include "posix_mmap.h"   /* mmap: the guest arena, see alloc_guest_vm */
 #endif
@@ -59,7 +61,6 @@
 #if defined(__APPLE__)
 #include <pthread/qos.h>
 #endif
-#include "ps3emu/thread_name.h"
 #include <atomic>
 #include <mutex>
 #include <pthread.h>
