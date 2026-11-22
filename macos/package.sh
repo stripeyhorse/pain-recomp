@@ -23,7 +23,12 @@ bundle="$app/Contents"
 resources="$bundle/Resources"
 frameworks="$bundle/Frameworks"
 helpers="$bundle/Helpers"
-archive="$stage/PAIN-MacBook-0.2.12-arm64.zip"
+# The release version, in one place: the archive name and Info.plist. The
+# launcher passes CFBundleShortVersionString to the runner as PAIN_BUILD,
+# which logs it at startup as "[build] PAIN <version>".
+version=0.2.13
+bundle_version=20261123.1
+archive="$stage/PAIN-MacBook-$version-arm64.zip"
 
 [[ ! -e "$app" && ! -e "$archive" ]]
 mkdir -p "$bundle/MacOS" "$resources/Licences" "$frameworks" "$helpers"
@@ -58,7 +63,7 @@ Portable distribution: https://github.com/astral-sh/python-build-standalone/rele
 See Python/lib/python3.12/LICENSE.txt and Python/share for Python and its dependencies.
 EOF
 
-cat > "$bundle/Info.plist" <<'PLIST'
+cat > "$bundle/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -69,8 +74,8 @@ cat > "$bundle/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key><string>com.stripeyhorse.painrecomp.launcher</string>
     <key>CFBundleName</key><string>PAIN</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.12</string>
-    <key>CFBundleVersion</key><string>20261122.5</string>
+    <key>CFBundleShortVersionString</key><string>$version</string>
+    <key>CFBundleVersion</key><string>$bundle_version</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
     <key>LSMinimumSystemVersion</key><string>27.0</string>
     <key>NSHighResolutionCapable</key><true/>

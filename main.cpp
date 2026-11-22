@@ -49,9 +49,7 @@
 #include <string.h>
 #include <chrono>
 #include <thread>
-#include "ps3emu/thread_name.h"   /* every platform; a no-op where there is no API */
-
-#include "ps3emu/thread_name.h"   /* ps3_thread_name, every platform */
+#include "ps3emu/thread_name.h"   /* ps3_thread_name: every platform; a no-op where there is no API */
 
 #ifndef _WIN32
 #include "posix_mmap.h"   /* mmap: the guest arena, see alloc_guest_vm */
@@ -278,11 +276,12 @@ static DWORD WINAPI frame_clock(LPVOID)
     };
     ULONGLONG next_tick = tick_us();
     /* PAIN paces itself on the vblank: it waits two of them per frame, which
-     * is 30 FPS on a 60 Hz console. PAIN_VBLANK_MS shortens the synthesized
-     * period (8 gives the game a 125 Hz vblank and up to 62.5 FPS; 8.333 is
-     * 120 Hz and 60 FPS). Fractional milliseconds are honoured. */
+     * is 30 FPS on a 60 Hz console. PAIN_VBLANK_MS sets the synthesized
+     * period (16.667 is the console's; 8.333 is 120 Hz and 60 FPS). The
+     * settings layer always publishes it, from vblank_ms or frame_rate.
+     * Fractional milliseconds are honoured. */
     const char* vblank_env = getenv("PAIN_VBLANK_MS");
-    double vblank_req = vblank_env ? strtod(vblank_env, NULL) : 16.0;
+    double vblank_req = vblank_env ? strtod(vblank_env, NULL) : 16.667;
     if (!(vblank_req >= 4.0)) vblank_req = 4.0;
     if (vblank_req > 33.0) vblank_req = 33.0;
     const ULONGLONG vblank_us = (ULONGLONG)(vblank_req * 1000.0 + 0.5);

@@ -20,7 +20,7 @@ namespace pain_settings {
 namespace {
 using namespace std::literals;
 
-enum class Kind { toggle, presence, inverted_toggle, number, post_scale, cap, language, size, aa, aniso, aspect, upscale };
+enum class Kind { toggle, presence, inverted_toggle, number, post_scale, cap, frame_rate, language, size, aa, aniso, aspect, upscale };
 
 struct Option {
     std::string_view key;
@@ -56,7 +56,11 @@ constexpr std::array options{
     Option{"pin_pose_at_kick", "PAIN_PIN_POSE_AT_KICK", "on", Kind::toggle},
     Option{"creator_first", "PS3_CREATOR_FIRST", "on", Kind::toggle},
     Option{"fifo_park_grace_ms", "GCM_PARK_GRACE_MS", "2000", Kind::number, 0, 60000},
-    Option{"vblank_ms", "PAIN_VBLANK_MS", "8", Kind::number, 4, 33},
+    // frame_rate sets the defaults of the two advanced settings after it:
+    // 30 is sim_steps 2 with a 16.667 ms vblank, 60 is sim_steps 1 with 8.333.
+    // An explicit vblank_ms or sim_steps (INI or environment) still wins.
+    Option{"frame_rate", "PAIN_FRAME_RATE", "30", Kind::frame_rate},
+    Option{"vblank_ms", "PAIN_VBLANK_MS", "16.667", Kind::number, 4, 33},
     Option{"sim_steps", "PAIN_SIM_STEPS", "2", Kind::number, 1, 2},
     Option{"thread_qos", "PS3_THREAD_QOS", "on", Kind::toggle},
 #if defined(__APPLE__)
@@ -70,6 +74,16 @@ std::array<std::string, options.size()> values;
 std::atomic<int> cap;
 bool trace;
 std::filesystem::path settings_path;
+
+// The default of a setting that frame_rate implies, given the frame_rate
+// already resolved (it comes earlier in the table).
+std::string_view fallback(const Option& option, std::string_view frame_rate)
+{
+    const bool sixty = frame_rate == "60";
+    if (option.key == "vblank_ms") return sixty ? "8.333"sv : "16.667"sv;
+    if (option.key == "sim_steps") return sixty ? "1"sv : "2"sv;
+    return option.fallback;
+}
 
 std::string_view trim(std::string_view text)
 {
@@ -113,6 +127,8 @@ bool normalize(const Option& option, std::string& value)
         return parse_number(value, integer) && integer >= 50 && integer <= 200;
     case Kind::cap:
         return parse_number(value, integer) && (integer == 0 || integer == 20 || integer == 30 || integer == 60);
+    case Kind::frame_rate:
+        return value == "30" || value == "60";
     case Kind::aniso:
         return parse_number(value, integer) && (integer == 0 || (integer >= 2 && integer <= 16));
     case Kind::size: {
@@ -222,6 +238,7 @@ bool load()
         }
     }
     if (trace) std::fprintf(stderr, "[settings] %s (%s)\n", path.string().c_str(), exists ? "loaded" : "absent");
+    std::string frame_rate;
     for (size_t i = 0; i < options.size(); ++i) {
         const auto& option = options[i];
         std::string value = ini[i];
@@ -240,8 +257,12 @@ bool load()
                     value.clear();
                 }
             }
-            if (value.empty()) value = option.fallback;
+            if (value.empty()) {
+                value = fallback(option, frame_rate);
+                if (option.key == "vblank_ms" || option.key == "sim_steps") source = "frame_rate";
+            }
         }
+        if (option.key == "frame_rate") frame_rate = value;
         if (!apply_option(option, value)) {
             std::fprintf(stderr, "[settings] could not publish %s\n", option.env);
             return false;
