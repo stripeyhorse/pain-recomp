@@ -37,7 +37,8 @@ root = pathlib.Path(a.root)
 game = root / "game/Pain_BCES00548/Pain BCES00548/PS3_GAME"
 if not (game / "USRDIR/EBOOT.elf").exists():
     print(f"no disc at {game} (use --root)", file=sys.stderr); sys.exit(2)
-stage = pathlib.Path(a.stage); stage.mkdir(parents=True, exist_ok=False)
+# Absolute: the game runs with cwd=stage and gets these paths in its environment.
+stage = pathlib.Path(a.stage).resolve(); stage.mkdir(parents=True, exist_ok=False)
 pad = stage / "pad"; pad.write_text(""); (stage / "hdd1").mkdir()
 env = dict(os.environ,
            PS3_HDD0_ROOT=str(root / "hdd0"), PS3_HDD1_ROOT=str(stage / "hdd1"),
