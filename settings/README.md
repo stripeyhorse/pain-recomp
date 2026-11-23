@@ -37,6 +37,9 @@ updates the INI.
 | `upscale` | off, metalfx | Sets `PS3_UPSCALE`. Metal windowed present through the MetalFX spatial scaler instead of the bilinear sample; falls back with one log line if unavailable. Startup only. |
 | `language` | auto, PS3 language code or ID | System language reported to PAIN. Available translations depend on the disc. |
 | `audio` | on, off | Sets `PS3_MUTE`. Off silences the output device; PAIN's audio still runs and paces as normal. |
+| `stick_deadzone` | 0 to 50 | Sets `PS3_PAD_DEADZONE`. Controller stick dead zone in percent of full deflection, measured round the centre over both axes of a stick. Inside it the stick reads centred; outside it the stick ramps from centre to full with no jump. 0 is no dead zone. Whole numbers only. Defaults to 10. |
+| `vibration` | 0 to 100 | Sets `PS3_PAD_RUMBLE`. Controller vibration strength in percent, for both motors. 0 turns vibration off. Whole numbers only; `on` and `off` are not accepted. Defaults to 100. |
+| `controller_quit` | on, off | Sets `PS3_PAD_QUIT`. Holding the PS (Guide) button for 1 s, or START and SELECT together for 2 s, quits the game as closing the window does. While START and SELECT are held together the game sees neither. Defaults to on. |
 | `metal_headless`, `metal_guest_programs` | on, off | Select Metal output and guest shader use. Shader translation needs the toolkit dependencies. |
 | `vulkan_window`, `vulkan_guest_programs` | on, off | Select Vulkan window output and guest shader use. Shader translation needs the toolkit dependencies. |
 | `unlock_trainer` | on, off | Sets `PAIN_UNLOCK_ALL` for the optional guarded lift. |

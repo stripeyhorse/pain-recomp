@@ -33,7 +33,8 @@ struct Case {
 };
 
 const char* const watched[] = {"PAIN_FRAME_RATE", "PAIN_VBLANK_MS", "PAIN_SIM_STEPS", "PS3_MUTE", "PS3_NO_AUDIO",
-                              "PS3_SPURS_LANES_OF_2", "PAIN_TEST_PERF_CORES"};
+                               "PS3_SPURS_LANES_OF_2", "PAIN_TEST_PERF_CORES",
+                               "PS3_PAD_DEADZONE", "PS3_PAD_RUMBLE", "PS3_PAD_QUIT"};
 
 int run_case(const Case& test, const std::string& dir)
 {
@@ -148,6 +149,42 @@ int main()
          {{"mesh_lanes", "4"}}, {{"PS3_SPURS_LANES_OF_2", "4"}}},
         {"invalid_env_lanes_falls_back_to_auto", nullptr, {{"PS3_SPURS_LANES_OF_2", "0"}, {"PAIN_TEST_PERF_CORES", "4"}},
          {{"mesh_lanes", "2"}}, {{"PS3_SPURS_LANES_OF_2", "2"}}},
+        // Controller: stick_deadzone (0-50), vibration (0-100, numbers only),
+        // controller_quit (on/off).
+        {"controller_defaults", nullptr, {},
+         {{"stick_deadzone", "10"}, {"vibration", "100"}, {"controller_quit", "on"}},
+         {{"PS3_PAD_DEADZONE", "10"}, {"PS3_PAD_RUMBLE", "100"}, {"PS3_PAD_QUIT", "1"}}},
+        {"controller_ini", "[settings]\nstick_deadzone = 25\nvibration = 0\ncontroller_quit = off\n", {},
+         {{"stick_deadzone", "25"}, {"vibration", "0"}, {"controller_quit", "off"}},
+         {{"PS3_PAD_DEADZONE", "25"}, {"PS3_PAD_RUMBLE", "0"}, {"PS3_PAD_QUIT", "0"}}},
+        {"controller_ini_limits", "[settings]\nstick_deadzone = 0\nvibration = 100\ncontroller_quit = yes\n", {},
+         {{"stick_deadzone", "0"}, {"vibration", "100"}, {"controller_quit", "on"}},
+         {{"PS3_PAD_DEADZONE", "0"}, {"PS3_PAD_RUMBLE", "100"}, {"PS3_PAD_QUIT", "1"}}},
+        {"controller_ini_out_of_range_falls_back",
+         "[settings]\nstick_deadzone = 51\nvibration = 101\ncontroller_quit = maybe\n", {},
+         {{"stick_deadzone", "10"}, {"vibration", "100"}, {"controller_quit", "on"}},
+         {{"PS3_PAD_DEADZONE", "10"}, {"PS3_PAD_RUMBLE", "100"}, {"PS3_PAD_QUIT", "1"}}},
+        {"controller_ini_not_whole_numbers_fall_back",
+         "[settings]\nstick_deadzone = 7.5\nvibration = off\n", {},
+         {{"stick_deadzone", "10"}, {"vibration", "100"}}, {{"PS3_PAD_RUMBLE", "100"}}},
+        {"controller_ini_negative_falls_back", "[settings]\nstick_deadzone = -1\nvibration = -10\n", {},
+         {{"stick_deadzone", "10"}, {"vibration", "100"}}, {}},
+        {"controller_env", nullptr,
+         {{"PS3_PAD_DEADZONE", "30"}, {"PS3_PAD_RUMBLE", "40"}, {"PS3_PAD_QUIT", "0"}},
+         {{"stick_deadzone", "30"}, {"vibration", "40"}, {"controller_quit", "off"}},
+         {{"PS3_PAD_DEADZONE", "30"}, {"PS3_PAD_RUMBLE", "40"}, {"PS3_PAD_QUIT", "0"}}},
+        {"controller_ini_beats_env", "[settings]\nstick_deadzone = 5\nvibration = 70\ncontroller_quit = on\n",
+         {{"PS3_PAD_DEADZONE", "30"}, {"PS3_PAD_RUMBLE", "40"}, {"PS3_PAD_QUIT", "0"}},
+         {{"stick_deadzone", "5"}, {"vibration", "70"}, {"controller_quit", "on"}},
+         {{"PS3_PAD_DEADZONE", "5"}, {"PS3_PAD_RUMBLE", "70"}, {"PS3_PAD_QUIT", "1"}}},
+        {"controller_invalid_ini_uses_env", "[settings]\nstick_deadzone = 99\n", {{"PS3_PAD_DEADZONE", "20"}},
+         {{"stick_deadzone", "20"}}, {{"PS3_PAD_DEADZONE", "20"}}},
+        {"controller_invalid_env_is_default", nullptr,
+         {{"PS3_PAD_DEADZONE", "60"}, {"PS3_PAD_RUMBLE", "loud"}, {"PS3_PAD_QUIT", "sometimes"}},
+         {{"stick_deadzone", "10"}, {"vibration", "100"}, {"controller_quit", "on"}},
+         {{"PS3_PAD_DEADZONE", "10"}, {"PS3_PAD_RUMBLE", "100"}, {"PS3_PAD_QUIT", "1"}}},
+        {"controller_env_quit_off_word", nullptr, {{"PS3_PAD_QUIT", "off"}},
+         {{"controller_quit", "off"}}, {{"PS3_PAD_QUIT", "0"}}},
     };
 
     int failed = 0;

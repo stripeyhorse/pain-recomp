@@ -21,7 +21,7 @@ namespace pain_settings {
 namespace {
 using namespace std::literals;
 
-enum class Kind { toggle, presence, inverted_toggle, number, post_scale, cap, frame_rate, language, size, aa, aniso, aspect, upscale, lanes };
+enum class Kind { toggle, presence, inverted_toggle, number, integer, post_scale, cap, frame_rate, language, size, aa, aniso, aspect, upscale, lanes };
 
 struct Option {
     std::string_view key;
@@ -49,6 +49,9 @@ constexpr std::array options{
     Option{"upscale", "PS3_UPSCALE", "off", Kind::upscale},
     Option{"language", "PS3_LANG", "auto", Kind::language},
     Option{"audio", "PS3_MUTE", "on", Kind::presence},
+    Option{"stick_deadzone", "PS3_PAD_DEADZONE", "10", Kind::integer, 0, 50},
+    Option{"vibration", "PS3_PAD_RUMBLE", "100", Kind::integer, 0, 100},
+    Option{"controller_quit", "PS3_PAD_QUIT", "on", Kind::toggle},
     Option{"metal_headless", "PS3RECOMP_METAL_HEADLESS", "off", Kind::toggle},
     Option{"metal_guest_programs", "PS3RECOMP_METAL_FIXED_FUNCTION", "on", Kind::inverted_toggle},
     Option{"vulkan_window", "PS3RECOMP_VK_WINDOW", "off", Kind::toggle},
@@ -127,6 +130,8 @@ bool normalize(const Option& option, std::string& value)
         const double real = std::strtod(value.c_str(), &end);
         return end != value.c_str() && *end == '\0' && real >= option.minimum && real <= option.maximum;
     }
+    case Kind::integer:
+        return parse_number(value, integer) && integer >= option.minimum && integer <= option.maximum;
     case Kind::post_scale:
         return parse_number(value, integer) && integer >= 50 && integer <= 200;
     case Kind::cap:
