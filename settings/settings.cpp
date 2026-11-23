@@ -2,6 +2,7 @@
 
 #if defined(__APPLE__)
 #include "rsx_metal_backend.h"
+#include <sys/sysctl.h>
 #endif
 
 #include <array>
@@ -20,7 +21,7 @@ namespace pain_settings {
 namespace {
 using namespace std::literals;
 
-enum class Kind { toggle, presence, inverted_toggle, number, post_scale, cap, frame_rate, language, size, aa, aniso, aspect, upscale };
+enum class Kind { toggle, presence, inverted_toggle, number, post_scale, cap, frame_rate, language, size, aa, aniso, aspect, upscale, lanes };
 
 struct Option {
     std::string_view key;
@@ -66,7 +67,7 @@ constexpr std::array options{
 #if defined(__APPLE__)
     Option{"spu_mfc_lookup_cache", "SPU_MFC_LOOKUP_CACHE", "off", Kind::toggle},
 #endif
-    Option{"mesh_lanes", "PS3_SPURS_LANES_OF_2", "2", Kind::number, 1, 6},
+    Option{"mesh_lanes", "PS3_SPURS_LANES_OF_2", "auto", Kind::lanes, 1, 6},
 };
 
 std::mutex settings_mutex;
@@ -118,6 +119,9 @@ bool normalize(const Option& option, std::string& value)
         if (value == "yes" || value == "true" || value == "1") value = "on";
         if (value == "no" || value == "false" || value == "0") value = "off";
         return value == "on" || value == "off";
+    case Kind::lanes:
+        if (value == "auto") return true;
+        [[fallthrough]];
     case Kind::number: {
         char* end{};
         const double real = std::strtod(value.c_str(), &end);
@@ -154,6 +158,21 @@ bool normalize(const Option& option, std::string& value)
         return value == "off" || value == "metalfx";
     }
     return false;
+}
+
+// mesh_lanes = auto: 3 lanes on a Mac with six or more performance cores
+// (M4 Pro: 49 FPS on 2 lanes, 59.6 on 3), else 2 (M2: 3 gained nothing).
+// PAIN_TEST_PERF_CORES stands in for the core count, for tests and bench runs.
+int performance_cores()
+{
+    int cores = 0;
+    if (const char* forced = std::getenv("PAIN_TEST_PERF_CORES"); forced && parse_number(std::string_view(forced), cores))
+        return cores;
+#if defined(__APPLE__)
+    size_t size = sizeof cores;
+    if (sysctlbyname("hw.perflevel0.physicalcpu", &cores, &size, nullptr, 0) == 0) return cores;
+#endif
+    return 0;
 }
 
 const char* inherited(const Option& option)
@@ -263,6 +282,14 @@ bool load()
             }
         }
         if (option.key == "frame_rate") frame_rate = value;
+        std::string resolved_from;
+        if (option.kind == Kind::lanes && value == "auto") {
+            const int cores = performance_cores();
+            value = cores >= 6 ? "3" : "2";
+            resolved_from = std::string(source) + " auto, " +
+                (cores > 0 ? std::to_string(cores) + " performance cores" : "performance cores unknown"s);
+            source = resolved_from.c_str();
+        }
         if (!apply_option(option, value)) {
             std::fprintf(stderr, "[settings] could not publish %s\n", option.env);
             return false;

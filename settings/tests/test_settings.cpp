@@ -32,7 +32,8 @@ struct Case {
     Pairs published;    // environment variable -> value after load()
 };
 
-const char* const watched[] = {"PAIN_FRAME_RATE", "PAIN_VBLANK_MS", "PAIN_SIM_STEPS", "PS3_MUTE", "PS3_NO_AUDIO"};
+const char* const watched[] = {"PAIN_FRAME_RATE", "PAIN_VBLANK_MS", "PAIN_SIM_STEPS", "PS3_MUTE", "PS3_NO_AUDIO",
+                              "PS3_SPURS_LANES_OF_2", "PAIN_TEST_PERF_CORES"};
 
 int run_case(const Case& test, const std::string& dir)
 {
@@ -128,6 +129,25 @@ int main()
          {{"audio", "on"}}, {{"PS3_MUTE", nullptr}}},
         {"env_mute_is_audio_off", nullptr, {{"PS3_MUTE", "1"}},
          {{"audio", "off"}}, {{"PS3_MUTE", "1"}}},
+        // mesh_lanes = auto (the default): 3 lanes with 6+ performance cores, else 2.
+        {"auto_lanes_4_cores_is_2", nullptr, {{"PAIN_TEST_PERF_CORES", "4"}},
+         {{"mesh_lanes", "2"}}, {{"PS3_SPURS_LANES_OF_2", "2"}}},
+        {"auto_lanes_8_cores_is_3", nullptr, {{"PAIN_TEST_PERF_CORES", "8"}},
+         {{"mesh_lanes", "3"}}, {{"PS3_SPURS_LANES_OF_2", "3"}}},
+        {"ini_auto_lanes_8_cores_is_3", "[settings]\nmesh_lanes = auto\n", {{"PAIN_TEST_PERF_CORES", "8"}},
+         {{"mesh_lanes", "3"}}, {{"PS3_SPURS_LANES_OF_2", "3"}}},
+        {"ini_lanes_2_beats_8_cores", "[settings]\nmesh_lanes = 2\n", {{"PAIN_TEST_PERF_CORES", "8"}},
+         {{"mesh_lanes", "2"}}, {{"PS3_SPURS_LANES_OF_2", "2"}}},
+        {"env_lanes_4_beats_auto", nullptr, {{"PS3_SPURS_LANES_OF_2", "4"}, {"PAIN_TEST_PERF_CORES", "8"}},
+         {{"mesh_lanes", "4"}}, {{"PS3_SPURS_LANES_OF_2", "4"}}},
+        {"ini_lanes_beats_env_lanes", "[settings]\nmesh_lanes = 1\n", {{"PS3_SPURS_LANES_OF_2", "4"}},
+         {{"mesh_lanes", "1"}}, {{"PS3_SPURS_LANES_OF_2", "1"}}},
+        {"invalid_ini_lanes_falls_back_to_auto", "[settings]\nmesh_lanes = 7\n", {{"PAIN_TEST_PERF_CORES", "8"}},
+         {{"mesh_lanes", "3"}}, {{"PS3_SPURS_LANES_OF_2", "3"}}},
+        {"invalid_ini_lanes_uses_env", "[settings]\nmesh_lanes = lots\n", {{"PS3_SPURS_LANES_OF_2", "4"}},
+         {{"mesh_lanes", "4"}}, {{"PS3_SPURS_LANES_OF_2", "4"}}},
+        {"invalid_env_lanes_falls_back_to_auto", nullptr, {{"PS3_SPURS_LANES_OF_2", "0"}, {"PAIN_TEST_PERF_CORES", "4"}},
+         {{"mesh_lanes", "2"}}, {{"PS3_SPURS_LANES_OF_2", "2"}}},
     };
 
     int failed = 0;
