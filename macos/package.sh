@@ -34,7 +34,7 @@ archive="$stage/PAIN-MacBook-$version-arm64.zip"
 mkdir -p "$bundle/MacOS" "$resources/Licences" "$frameworks" "$helpers"
 xcrun swiftc -swift-version 5 -target arm64-apple-macos27.0 -O \
     "$here/main.swift" "$here/Launcher.swift" "$here/SettingsSheet.swift" "$here/SettingsFile.swift" \
-    -o "$bundle/MacOS/PAIN"
+    "$here/ControllerNavigator.swift" -o "$bundle/MacOS/PAIN"
 install -m 755 "$runner" "$helpers/PainRecomp"
 install_name_tool -rpath "$prefix/lib" '@executable_path/../Frameworks' "$helpers/PainRecomp"
 for library in libSDL2-2.0.0.dylib libspirv-cross-c-shared.0.dylib; do
@@ -77,6 +77,7 @@ cat > "$bundle/Info.plist" <<PLIST
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$version</string>
     <key>CFBundleVersion</key><string>$bundle_version</string>
+    <key>GCSupportsControllerUserInteraction</key><true/>
     <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
     <key>LSMinimumSystemVersion</key><string>27.0</string>
     <key>NSHighResolutionCapable</key><true/>

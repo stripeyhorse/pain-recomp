@@ -58,6 +58,15 @@ final class SettingsSheet: NSObject {
         ("Norwegian", "no"), ("Polish", "pl"), ("Turkish", "tr"),
     ].map { Choice(title: $0.0, value: $0.1) })
     private let audio = Toggle(.audio, "Sound")
+    private let vibration = Menu(.vibration, [
+        Choice(title: "Off", value: "0"), Choice(title: "25%", value: "25"), Choice(title: "50%", value: "50"),
+        Choice(title: "75%", value: "75"), Choice(title: "100%", value: "100"),
+    ])
+    private let deadzone = Menu(.stickDeadzone, [
+        Choice(title: "Off", value: "0"), Choice(title: "5%", value: "5"), Choice(title: "10%", value: "10"),
+        Choice(title: "15%", value: "15"), Choice(title: "20%", value: "20"), Choice(title: "30%", value: "30"),
+    ])
+    private let controllerQuit = Toggle(.controllerQuit, "Hold PS or Start+Select to quit")
     private let fpsButton = NSButton(checkboxWithTitle: "Show FPS", target: nil, action: nil)
     private var shownFPS = false
 
@@ -66,10 +75,26 @@ final class SettingsSheet: NSObject {
     private var grid: NSGridView!
     private var warningRow: NSGridRow!
     private let message = NSTextField(wrappingLabelWithString: "")
+    private var revealButton: NSButton!
+    private var cancelButton: NSButton!
     private var saveButton: NSButton!
 
-    private var menus: [Menu] { [resolution, frameRate, aspect, antialiasing, upscale, anisotropic, language] }
-    private var toggles: [Toggle] { [vsync, fullscreen, audio] }
+    private var menus: [Menu] {
+        [resolution, frameRate, aspect, antialiasing, upscale, anisotropic, language, vibration, deadzone]
+    }
+    private var toggles: [Toggle] { [vsync, fullscreen, audio, controllerQuit] }
+
+    /// The controller's focus order: the sheet top to bottom, as Tab goes.
+    var controllerScreen: ControllerNavigator.Screen {
+        ControllerNavigator.Screen(
+            window: panel,
+            controls: [resolution.button, frameRate.button, vsync.button, fullscreen.button, aspect.button,
+                       antialiasing.button, upscale.button, anisotropic.button, language.button, audio.button,
+                       fpsButton, vibration.button, deadzone.button, controllerQuit.button,
+                       revealButton, cancelButton, saveButton],
+            initial: resolution.button,
+            cancel: { [weak self] in self?.cancelButton.performClick(nil) })
+    }
 
     init(url: URL) {
         self.url = url
@@ -117,6 +142,8 @@ final class SettingsSheet: NSObject {
             menu.button.action = #selector(choiceChanged(_:))
         }
 
+        let heading = NSTextField(labelWithString: "Controller")
+        heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         let rows: [[NSView]] = [
             labelled("Resolution:", resolution.button),
             labelled("Frame rate:", frameRate.button),
@@ -130,6 +157,10 @@ final class SettingsSheet: NSObject {
             labelled("Language:", language.button),
             [NSGridCell.emptyContentView, audio.button],
             [NSGridCell.emptyContentView, fpsButton],
+            [heading],
+            labelled("Vibration:", vibration.button),
+            labelled("Stick dead zone:", deadzone.button),
+            [NSGridCell.emptyContentView, controllerQuit.button],
         ]
         grid = NSGridView(views: rows)
         grid.rowSpacing = 10
@@ -139,6 +170,10 @@ final class SettingsSheet: NSObject {
         grid.column(at: 1).xPlacement = .leading
         warningRow = grid.row(at: 2)
         warningRow.topPadding = -4
+        let headingRow = grid.row(at: rows.firstIndex { $0.first === heading }!)
+        headingRow.mergeCells(in: NSRange(location: 0, length: 2))
+        headingRow.topPadding = 10
+        headingRow.cell(at: 0).xPlacement = .leading
         for menu in menus where menu !== language {
             menu.button.widthAnchor.constraint(equalTo: language.button.widthAnchor).isActive = true
         }
@@ -146,14 +181,14 @@ final class SettingsSheet: NSObject {
         warning.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         message.isHidden = true
 
-        let reveal = NSButton(title: "Show Settings File", target: self, action: #selector(revealFile))
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
-        cancel.keyEquivalent = "\u{1b}"
+        revealButton = NSButton(title: "Show Settings File", target: self, action: #selector(revealFile))
+        cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancel))
+        cancelButton.keyEquivalent = "\u{1b}"
         saveButton = NSButton(title: "Save", target: self, action: #selector(save))
         saveButton.keyEquivalent = "\r"
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let actions = NSStackView(views: [reveal, spacer, cancel, saveButton])
+        let actions = NSStackView(views: [revealButton, spacer, cancelButton, saveButton])
         actions.orientation = .horizontal
         actions.spacing = 12
 
@@ -191,10 +226,11 @@ final class SettingsSheet: NSObject {
         if index == nil {
             // A valid value the pop-up doesn't list keeps its own item.
             switch menu.setting {
-            case .anisotropic:
+            case .anisotropic, .vibration, .stickDeadzone:
                 let level = Int(SettingsFile.integer(value) ?? 0)
                 let at = choices.firstIndex { Int(SettingsFile.integer($0.value) ?? 0) > level } ?? choices.count
-                choices.insert(Choice(title: "\(level)×", value: value), at: at)
+                choices.insert(Choice(title: menu.setting == .anisotropic ? "\(level)×" : "\(level)%", value: value),
+                               at: at)
                 index = at
             default:
                 choices.append(Choice(title: "Custom (\(value)×)", value: value))
@@ -211,7 +247,7 @@ final class SettingsSheet: NSObject {
     private func same(_ setting: Setting, _ a: String, _ b: String) -> Bool {
         switch setting {
         case .resScale: return SettingsFile.real(a) == SettingsFile.real(b)
-        case .anisotropic: return SettingsFile.integer(a) == SettingsFile.integer(b)
+        case .anisotropic, .vibration, .stickDeadzone: return SettingsFile.integer(a) == SettingsFile.integer(b)
         case .language: return languageID(a) == languageID(b)
         default: return a == b
         }

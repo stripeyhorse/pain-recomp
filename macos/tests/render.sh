@@ -12,6 +12,6 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 xcrun swiftc -swift-version 5 -target arm64-apple-macos27.0 -warnings-as-errors \
     "$here/render/main.swift" "$here/../Launcher.swift" "$here/../SettingsSheet.swift" \
-    "$here/../SettingsFile.swift" -o "$work/render"
+    "$here/../SettingsFile.swift" "$here/../ControllerNavigator.swift" -o "$work/render"
 mkdir "$work/state"
 PAIN_PREVIEW_DATA_DIR="$work/state" "$work/render" "$output"

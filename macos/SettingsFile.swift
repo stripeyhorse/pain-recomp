@@ -8,6 +8,7 @@ import Foundation
 enum Setting: String, CaseIterable {
     case resScale = "res_scale", frameRate = "frame_rate", vsync, fullscreen, aspect, aa, upscale
     case anisotropic, language, audio
+    case stickDeadzone = "stick_deadzone", vibration, controllerQuit = "controller_quit"
 
     var key: String { rawValue }
 
@@ -15,11 +16,13 @@ enum Setting: String, CaseIterable {
         switch self {
         case .resScale: return "1"
         case .frameRate: return "30"
-        case .vsync, .audio: return "on"
+        case .vsync, .audio, .controllerQuit: return "on"
         case .fullscreen, .aa, .upscale: return "off"
         case .aspect: return "fit"
         case .anisotropic: return "0"
         case .language: return "auto"
+        case .stickDeadzone: return "10"
+        case .vibration: return "100"
         }
     }
 
@@ -27,7 +30,7 @@ enum Setting: String, CaseIterable {
     func normalize(_ text: String) -> String? {
         var value = SettingsFile.lower(SettingsFile.trim(text))
         switch self {
-        case .vsync, .fullscreen, .audio:
+        case .vsync, .fullscreen, .audio, .controllerQuit:
             if value == "yes" || value == "true" || value == "1" { value = "on" }
             if value == "no" || value == "false" || value == "0" { value = "off" }
             return value == "on" || value == "off" ? value : nil
@@ -54,6 +57,10 @@ enum Setting: String, CaseIterable {
         case .upscale:
             if value == "0" { value = "off" }
             return value == "off" || value == "metalfx" ? value : nil
+        case .stickDeadzone, .vibration:
+            guard let integer = SettingsFile.integer(value),
+                  (0...(self == .vibration ? 100 : 50)).contains(integer) else { return nil }
+            return value
         }
     }
 }

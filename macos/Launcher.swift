@@ -14,13 +14,15 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private let files = FileManager.default
     private let bundle = Bundle.main
     private let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 510, height: 158),
+        // The bottom 16 pt are kept for the controller line under a three-line message.
+        contentRect: NSRect(x: 0, y: 0, width: 510, height: 174),
         styleMask: [.titled, .closable, .miniaturizable],
         backing: .buffered, defer: false
     )
     private let sourceLabel = NSTextField(labelWithString: "Choose your PAIN disc ZIP or extracted folder.")
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
     private let progress = NSProgressIndicator()
+    private let controllerLabel = NSTextField(labelWithString: "")
     private var chooseButton: NSButton!
     private var playButton: NSButton!
     private var logButton: NSButton!
@@ -30,6 +32,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private var currentLog: URL?
     private var shaderProgressTimer: Timer?
     private var shaderProgressOffset: UInt64 = 0
+    let navigator = ControllerNavigator()
+    private var controllerInput: ControllerInput?
 
     private lazy var state: URL = {
         if let override = ProcessInfo.processInfo.environment["PAIN_PREVIEW_DATA_DIR"] {
@@ -48,6 +52,9 @@ final class Launcher: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMenu()
         configureWindow()
+        navigator.isBusy = { [weak self] in self?.activeProcess != nil }
+        navigator.screen = { [weak self] in self?.controllerScreen() }
+        controllerInput = ControllerInput(navigator: navigator) { [weak self] in self?.showController($0) }
         refreshSelection()
         do {
             try files.createDirectory(at: logs, withIntermediateDirectories: true,
@@ -112,7 +119,11 @@ final class Launcher: NSObject, NSApplicationDelegate {
         actions.alignment = .centerY
         actions.spacing = 10
 
-        let layout = NSStackView(views: [sourceLabel, statusLabel, actions])
+        controllerLabel.lineBreakMode = .byTruncatingTail
+        controllerLabel.isHidden = true
+        controllerLabel.setAccessibilityElement(true)
+
+        let layout = NSStackView(views: [sourceLabel, statusLabel, actions, controllerLabel])
         layout.orientation = .vertical
         layout.alignment = .leading
         layout.spacing = 12
@@ -127,7 +138,27 @@ final class Launcher: NSObject, NSApplicationDelegate {
             sourceLabel.widthAnchor.constraint(equalTo: layout.widthAnchor),
             statusLabel.widthAnchor.constraint(equalTo: layout.widthAnchor),
             actions.widthAnchor.constraint(equalTo: layout.widthAnchor),
+            controllerLabel.widthAnchor.constraint(equalTo: layout.widthAnchor),
         ])
+    }
+
+    /// The connected controller under the buttons, where nothing else moves;
+    /// nothing at all when none is connected.
+    func showController(_ status: (text: String, label: String)?) {
+        controllerLabel.stringValue = status?.text ?? ""
+        controllerLabel.setAccessibilityLabel(status?.label)
+        controllerLabel.isHidden = status == nil
+    }
+
+    private func controllerScreen() -> ControllerNavigator.Screen? {
+        if let sheet = window.attachedSheet {
+            if sheet === settingsSheet.panel { return settingsSheet.controllerScreen }
+            // The game picker: Circle backs out of it; choosing needs a mouse or keyboard.
+            return ControllerNavigator.Screen(window: sheet, controls: [],
+                                              cancel: { [weak self] in self?.window.endSheet(sheet, returnCode: .cancel) })
+        }
+        return ControllerNavigator.Screen(window: window, controls: [chooseButton, logButton, settingsButton, playButton],
+                                          initial: playButton, play: playButton)
     }
 
     private func refreshSelection() {
@@ -158,6 +189,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
         settingsButton.isEnabled = activeProcess == nil
         playButton.isEnabled = activeProcess == nil && selection != nil
         logButton.isEnabled = currentLog != nil || files.fileExists(atPath: logs.path)
+        // A child starting or ending changes whether the controller counts.
+        navigator.refresh()
     }
 
     @objc private func chooseGame() {

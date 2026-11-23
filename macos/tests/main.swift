@@ -59,6 +59,18 @@ reads("res_scale bounds", "res_scale = 0.5\n", [.resScale: "0.5"])
 reads("custom anisotropic", "anisotropic = 6\n", [.anisotropic: "6"])
 reads("numeric language", "language = 18\n", [.language: "18"])
 reads("language code is lower-cased", "language = EN-GB\n", [.language: "en-gb"])
+check("controller defaults are the game's", Setting.stickDeadzone.fallback == "10" &&
+      Setting.vibration.fallback == "100" && Setting.controllerQuit.fallback == "on")
+reads("controller keys", "[settings]\nstick_deadzone = 0\nvibration = 55\ncontroller_quit = off\n",
+      [.stickDeadzone: "0", .vibration: "55", .controllerQuit: "off"])
+reads("controller number bounds", "stick_deadzone = 50\nvibration = 0\n", [.stickDeadzone: "50", .vibration: "0"])
+reads("controller numbers out of range read as defaults", "stick_deadzone = 51\nvibration = 101\n", [:])
+reads("controller numbers are integers only",
+      "stick_deadzone = 10.0\nstick_deadzone = +5\nvibration = 1e2\nvibration = 50%\nvibration = -1\nstick_deadzone =\n", [:])
+reads("controller numbers keep their text", "stick_deadzone = 08\nvibration = 040\n", [.stickDeadzone: "08", .vibration: "040"])
+reads("controller_quit synonyms", "controller_quit = No\n", [.controllerQuit: "off"])
+reads("controller_quit invalid reads as default", "controller_quit = off\ncontroller_quit = maybe\n", [.controllerQuit: "off"])
+reads("controller keys in another section are ignored", "[pad]\nvibration = 0\ncontroller_quit = off\n", [:])
 check("numeric language maps to its language", languageID("18") == languageID("en-gb") && languageID("0") == 0)
 check("language ids follow cellSysutil", languageID("en") == 1 && languageID("en-us") == 1 &&
       languageID("pt") == 7 && languageID("pt-br") == 17 && languageID("tr") == 19 && languageID("auto") == nil)
@@ -103,6 +115,13 @@ writes("frame_rate change comments out every active override line", "vblank_ms =
        "; vblank_ms = 8\n; vblank_ms = 12\nframe_rate = 60\n")
 writes("overrides untouched when frame_rate is unchanged", "[settings]\nvblank_ms = 10\nsim_steps = 1\n", [(.aa, "smaa")],
        "[settings]\nvblank_ms = 10\nsim_steps = 1\naa = smaa\n")
+writes("controller keys inserted in order", "[settings]\n",
+       [(.vibration, "50"), (.stickDeadzone, "15"), (.controllerQuit, "off")],
+       "[settings]\nvibration = 50\nstick_deadzone = 15\ncontroller_quit = off\n")
+writes("controller key replaced in place", "[settings]\nvibration = 40 ; mine\nCONTROLLER_QUIT = yes\n",
+       [(.vibration, "0"), (.controllerQuit, "off")], "[settings]\nvibration = 0 ; mine\nCONTROLLER_QUIT = off\n")
+writes("custom vibration kept when another key changes", "vibration = 40\n", [(.stickDeadzone, "5")],
+       "vibration = 40\nstick_deadzone = 5\n")
 writes("custom res_scale kept when another key changes", "res_scale = 1.25\n", [(.aa, "fxaa")],
        "res_scale = 1.25\naa = fxaa\n")
 
@@ -158,6 +177,11 @@ if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--crosscheck" 
         ("read-invalid", "res_scale = 4\nframe_rate = 45\nanisotropic = 1\nlanguage = xx\naspect=\n", [], [:]),
         ("read-numbers", "res_scale = 0x2\nanisotropic = 08\nlanguage = 18\nframe_rate = 60\n", [], [:]),
         ("read-odd-language", "language = en en-us\nres_scale = 1.25e0\n", [], [:]),
+        ("written-controller", "[settings]\nvibration = 40 ; mine\n",
+         [(.vibration, "75"), (.stickDeadzone, "30"), (.controllerQuit, "off")], [:]),
+        ("read-controller", "stick_deadzone = 08\nvibration = 0\ncontroller_quit = No\n", [], [:]),
+        ("read-controller-invalid", "stick_deadzone = 51\nvibration = 101\ncontroller_quit = maybe\n", [], [:]),
+        ("read-controller-odd", "stick_deadzone = 10.0\nvibration = +5\nstick_deadzone = -0\nvibration = 1e2\n", [], [:]),
         ("read-last-valid", "language = fr\nlanguage = zz\nanisotropic = 4\nanisotropic = 6\n", [], [:]),
     ]
     for (name, input, changes, extra) in files {
