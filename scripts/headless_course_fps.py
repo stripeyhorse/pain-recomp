@@ -38,6 +38,7 @@ game = root / "game/Pain_BCES00548/Pain BCES00548/PS3_GAME"
 if not (game / "USRDIR/EBOOT.elf").exists():
     print(f"no disc at {game} (use --root)", file=sys.stderr); sys.exit(2)
 # Absolute: the game runs with cwd=stage and gets these paths in its environment.
+exe = pathlib.Path(a.exe).resolve()
 stage = pathlib.Path(a.stage).resolve(); stage.mkdir(parents=True, exist_ok=False)
 pad = stage / "pad"; pad.write_text(""); (stage / "hdd1").mkdir()
 env = dict(os.environ,
@@ -45,7 +46,7 @@ env = dict(os.environ,
            PS3_GAMEDATA_ROOT=str(stage / "gamedata"), PAIN_SETTINGS_PATH=str(stage / "settings.ini"),
            PAD_FILE=str(pad), PAD_SCRIPT="33:0x4000,42:0x0008,53:0x4000,70:0x4000",
            GCM_FLIPCOUNT="1", PS3_VERBOSE="0")
-proc = subprocess.Popen([a.exe, str(game / "USRDIR/EBOOT.elf")], cwd=stage, env=env,
+proc = subprocess.Popen([str(exe), str(game / "USRDIR/EBOOT.elf")], cwd=stage, env=env,
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 sel = selectors.DefaultSelector(); sel.register(proc.stdout, selectors.EVENT_READ)
 

@@ -26,8 +26,8 @@ helpers="$bundle/Helpers"
 # The release version, in one place: the archive name and Info.plist. The
 # launcher passes CFBundleShortVersionString to the runner as PAIN_BUILD,
 # which logs it at startup as "[build] PAIN <version>".
-version=0.2.13
-bundle_version=20261123.1
+version=0.2.14
+bundle_version=20261123.2
 archive="$stage/PAIN-MacBook-$version-arm64.zip"
 
 [[ ! -e "$app" && ! -e "$archive" ]]
