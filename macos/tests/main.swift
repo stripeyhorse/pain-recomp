@@ -71,6 +71,15 @@ reads("controller numbers keep their text", "stick_deadzone = 08\nvibration = 04
 reads("controller_quit synonyms", "controller_quit = No\n", [.controllerQuit: "off"])
 reads("controller_quit invalid reads as default", "controller_quit = off\ncontroller_quit = maybe\n", [.controllerQuit: "off"])
 reads("controller keys in another section are ignored", "[pad]\nvibration = 0\ncontroller_quit = off\n", [:])
+check("motion defaults are the game's", Setting.motion.fallback == "on" && Setting.shakeButton.fallback == "off")
+reads("motion keys", "[settings]\nmotion = off\nshake_button = r3\n", [.motion: "off", .shakeButton: "r3"])
+reads("shake_button values are lower-cased", "shake_button = TouchPad\n", [.shakeButton: "touchpad"])
+reads("shake_button l3 with a comment", "shake_button = l3 ; left stick\n", [.shakeButton: "l3"])
+reads("motion synonyms", "motion = No\n", [.motion: "off"])
+reads("motion and shake_button invalid read as defaults",
+      "motion = maybe\nshake_button = r2\nshake_button = 0\nshake_button = l 3\nshake_button =\n", [:])
+reads("shake_button: a later invalid value keeps the earlier valid one", "shake_button = r3\nshake_button = x\n",
+      [.shakeButton: "r3"])
 check("numeric language maps to its language", languageID("18") == languageID("en-gb") && languageID("0") == 0)
 check("language ids follow cellSysutil", languageID("en") == 1 && languageID("en-us") == 1 &&
       languageID("pt") == 7 && languageID("pt-br") == 17 && languageID("tr") == 19 && languageID("auto") == nil)
@@ -120,6 +129,10 @@ writes("controller keys inserted in order", "[settings]\n",
        "[settings]\nvibration = 50\nstick_deadzone = 15\ncontroller_quit = off\n")
 writes("controller key replaced in place", "[settings]\nvibration = 40 ; mine\nCONTROLLER_QUIT = yes\n",
        [(.vibration, "0"), (.controllerQuit, "off")], "[settings]\nvibration = 0 ; mine\nCONTROLLER_QUIT = off\n")
+writes("motion keys inserted in order", "[settings]\nvibration = 50\n", [(.motion, "off"), (.shakeButton, "touchpad")],
+       "[settings]\nvibration = 50\nmotion = off\nshake_button = touchpad\n")
+writes("shake_button replaced in place", "[settings]\nSHAKE_BUTTON = R3 ; mine\nmotion = 0\n",
+       [(.shakeButton, "off"), (.motion, "on")], "[settings]\nSHAKE_BUTTON = off ; mine\nmotion = on\n")
 writes("custom vibration kept when another key changes", "vibration = 40\n", [(.stickDeadzone, "5")],
        "vibration = 40\nstick_deadzone = 5\n")
 writes("custom res_scale kept when another key changes", "res_scale = 1.25\n", [(.aa, "fxaa")],
@@ -181,6 +194,9 @@ if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--crosscheck" 
          [(.vibration, "75"), (.stickDeadzone, "30"), (.controllerQuit, "off")], [:]),
         ("read-controller", "stick_deadzone = 08\nvibration = 0\ncontroller_quit = No\n", [], [:]),
         ("read-controller-invalid", "stick_deadzone = 51\nvibration = 101\ncontroller_quit = maybe\n", [], [:]),
+        ("written-motion", "[settings]\nshake_button = l3\n", [(.shakeButton, "r3"), (.motion, "off")], [:]),
+        ("read-motion", "motion = No\nshake_button = TOUCHPAD\n", [], [:]),
+        ("read-motion-invalid", "motion = maybe\nshake_button = r2\nshake_button = 0\nshake_button = l 3\n", [], [:]),
         ("read-controller-odd", "stick_deadzone = 10.0\nvibration = +5\nstick_deadzone = -0\nvibration = 1e2\n", [], [:]),
         ("read-last-valid", "language = fr\nlanguage = zz\nanisotropic = 4\nanisotropic = 6\n", [], [:]),
     ]

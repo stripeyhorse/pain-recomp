@@ -34,7 +34,8 @@ struct Case {
 
 const char* const watched[] = {"PAIN_FRAME_RATE", "PAIN_VBLANK_MS", "PAIN_SIM_STEPS", "PS3_MUTE", "PS3_NO_AUDIO",
                                "PS3_SPURS_LANES_OF_2", "PAIN_TEST_PERF_CORES",
-                               "PS3_PAD_DEADZONE", "PS3_PAD_RUMBLE", "PS3_PAD_QUIT"};
+                               "PS3_PAD_DEADZONE", "PS3_PAD_RUMBLE", "PS3_PAD_QUIT", "PS3_PAD_MOTION",
+                               "PS3_PAD_SHAKE_BUTTON"};
 
 int run_case(const Case& test, const std::string& dir)
 {
@@ -185,6 +186,30 @@ int main()
          {{"PS3_PAD_DEADZONE", "10"}, {"PS3_PAD_RUMBLE", "100"}, {"PS3_PAD_QUIT", "1"}}},
         {"controller_env_quit_off_word", nullptr, {{"PS3_PAD_QUIT", "off"}},
          {{"controller_quit", "off"}}, {{"PS3_PAD_QUIT", "0"}}},
+        // Motion: motion (on/off), shake_button (off, l3, r3, touchpad).
+        {"motion_defaults", nullptr, {},
+         {{"motion", "on"}, {"shake_button", "off"}}, {{"PS3_PAD_MOTION", "1"}, {"PS3_PAD_SHAKE_BUTTON", "off"}}},
+        {"motion_ini", "[settings]\nmotion = off\nshake_button = r3\n", {},
+         {{"motion", "off"}, {"shake_button", "r3"}}, {{"PS3_PAD_MOTION", "0"}, {"PS3_PAD_SHAKE_BUTTON", "r3"}}},
+        {"motion_ini_other_buttons", "[settings]\nmotion = Yes\nshake_button = TouchPad\n", {},
+         {{"motion", "on"}, {"shake_button", "touchpad"}},
+         {{"PS3_PAD_MOTION", "1"}, {"PS3_PAD_SHAKE_BUTTON", "touchpad"}}},
+        {"motion_ini_l3", "[settings]\nshake_button = l3 ; left stick\n", {},
+         {{"shake_button", "l3"}}, {{"PS3_PAD_SHAKE_BUTTON", "l3"}}},
+        {"motion_ini_invalid_falls_back", "[settings]\nmotion = maybe\nshake_button = r2\nshake_button = 0\n", {},
+         {{"motion", "on"}, {"shake_button", "off"}}, {{"PS3_PAD_MOTION", "1"}, {"PS3_PAD_SHAKE_BUTTON", "off"}}},
+        {"motion_env", nullptr, {{"PS3_PAD_MOTION", "0"}, {"PS3_PAD_SHAKE_BUTTON", "L3"}},
+         {{"motion", "off"}, {"shake_button", "l3"}}, {{"PS3_PAD_MOTION", "0"}, {"PS3_PAD_SHAKE_BUTTON", "l3"}}},
+        {"motion_ini_beats_env", "[settings]\nmotion = on\nshake_button = touchpad\n",
+         {{"PS3_PAD_MOTION", "off"}, {"PS3_PAD_SHAKE_BUTTON", "r3"}},
+         {{"motion", "on"}, {"shake_button", "touchpad"}},
+         {{"PS3_PAD_MOTION", "1"}, {"PS3_PAD_SHAKE_BUTTON", "touchpad"}}},
+        {"motion_invalid_ini_uses_env", "[settings]\nshake_button = square\n", {{"PS3_PAD_SHAKE_BUTTON", "r3"}},
+         {{"shake_button", "r3"}}, {{"PS3_PAD_SHAKE_BUTTON", "r3"}}},
+        {"motion_invalid_env_is_default", nullptr, {{"PS3_PAD_MOTION", "sometimes"}, {"PS3_PAD_SHAKE_BUTTON", "x"}},
+         {{"motion", "on"}, {"shake_button", "off"}}, {{"PS3_PAD_MOTION", "1"}, {"PS3_PAD_SHAKE_BUTTON", "off"}}},
+        {"motion_env_empty_is_off", nullptr, {{"PS3_PAD_MOTION", ""}},
+         {{"motion", "off"}}, {{"PS3_PAD_MOTION", "0"}}},
     };
 
     int failed = 0;

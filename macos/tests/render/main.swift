@@ -99,7 +99,7 @@ check("Save with no changes creates no file", contents() == nil)
 check("Save with no changes leaves Show FPS alone", UserDefaults.standard.object(forKey: "showFPS") as? Bool == fpsBefore as? Bool)
 
 let labels = ["Resolution:", "Frame rate:", "Picture shape:", "Anti-aliasing:", "Upscaling:", "Texture filtering:", "Language:",
-              "Vibration:", "Stick dead zone:"]
+              "Vibration:", "Stick dead zone:", "Shake button:"]
 check("every pop-up's accessible title is its visible label",
       labels.allSatisfy { label in views(in: panel.contentView!).contains {
           ($0 as? NSPopUpButton)?.accessibilityTitleUIElement() as? NSTextField != nil &&
@@ -109,7 +109,9 @@ check("defaults shown", popUp(panel, "Resolution:").titleOfSelectedItem == "1280
       popUp(panel, "Frame rate:").titleOfSelectedItem == "30 FPS" && popUp(panel, "Language:").titleOfSelectedItem == "Automatic" &&
       button(panel, "V-Sync").state == .on && button(panel, "Sound").state == .on && button(panel, "Full screen").state == .off &&
       popUp(panel, "Vibration:").titleOfSelectedItem == "100%" && popUp(panel, "Stick dead zone:").titleOfSelectedItem == "10%" &&
-      button(panel, "Hold PS or Start+Select to quit").state == .on)
+      button(panel, "Hold PS or Start+Select to quit").state == .on && button(panel, "Motion").state == .on &&
+      popUp(panel, "Shake button:").titleOfSelectedItem == "Off" &&
+      popUp(panel, "Shake button:").itemTitles == ["Off", "L3", "R3", "Touchpad"])
 
 // Tab order: the key view loop from the first control.
 panel.recalculateKeyViewLoop()
@@ -129,7 +131,7 @@ for _ in 0..<200 {
 print("tab order: " + order.joined(separator: " → "))
 let tabOrder = ["Resolution:", "Frame rate:", "V-Sync", "Full screen", "Picture shape:",
       "Anti-aliasing:", "Upscaling:", "Texture filtering:", "Language:", "Sound", "Show FPS",
-      "Vibration:", "Stick dead zone:", "Hold PS or Start+Select to quit",
+      "Vibration:", "Stick dead zone:", "Hold PS or Start+Select to quit", "Motion", "Shake button:",
       "Show Settings File", "Cancel", "Save"]
 check("tab order runs top to bottom", order == tabOrder, order.joined(separator: ", "))
 check("Return saves and Escape cancels", button(panel, "Save").keyEquivalent == "\r" && button(panel, "Cancel").keyEquivalent == "\u{1b}")
@@ -421,9 +423,19 @@ focus("Stick dead zone:")
 check("Stick dead zone Right", sheetNav.perform(.right) && popUp(panel, "Stick dead zone:").titleOfSelectedItem == "15%")
 focus("Hold PS or Start+Select to quit")
 check("quit checkbox toggles", sheetNav.perform(.activate) && button(panel, "Hold PS or Start+Select to quit").state == .off)
+check("Down from the quit checkbox reaches Motion", sheetNav.perform(.down) && name(panel.firstResponder) == "Motion")
+check("Motion toggles", sheetNav.perform(.activate) && button(panel, "Motion").state == .off)
+check("Down from Motion reaches Shake button", sheetNav.perform(.down) && name(panel.firstResponder) == "Shake button:")
+check("Shake button Right, Right", sheetNav.perform(.right) && sheetNav.perform(.right) &&
+      popUp(panel, "Shake button:").titleOfSelectedItem == "R3")
+check("Shake button Right to Touchpad, then the end", sheetNav.perform(.right) &&
+      popUp(panel, "Shake button:").titleOfSelectedItem == "Touchpad" && !sheetNav.perform(.right))
+check("Shake button Left", sheetNav.perform(.left) && popUp(panel, "Shake button:").titleOfSelectedItem == "R3")
+check("Down from Shake button reaches Show Settings File", sheetNav.perform(.down) &&
+      name(panel.firstResponder) == "Show Settings File")
 focus("Save")
 check("Cross on Save", sheetNav.perform(.activate))
-let saved = "[settings]\nvibration = 75\nstick_deadzone = 15\naudio = off\ncontroller_quit = off\n"
+let saved = "[settings]\nvibration = 75\nstick_deadzone = 15\nshake_button = r3\naudio = off\ncontroller_quit = off\nmotion = off\n"
 check("Save by controller writes exactly the changed keys", contents() == saved, contents()?.debugDescription ?? "nil")
 sheet.reload()
 focus("Vibration:")

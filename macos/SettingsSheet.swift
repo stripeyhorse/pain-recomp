@@ -67,6 +67,11 @@ final class SettingsSheet: NSObject {
         Choice(title: "15%", value: "15"), Choice(title: "20%", value: "20"), Choice(title: "30%", value: "30"),
     ])
     private let controllerQuit = Toggle(.controllerQuit, "Hold PS or Start+Select to quit")
+    private let motion = Toggle(.motion, "Motion")
+    private let shakeButton = Menu(.shakeButton, [
+        Choice(title: "Off", value: "off"), Choice(title: "L3", value: "l3"), Choice(title: "R3", value: "r3"),
+        Choice(title: "Touchpad", value: "touchpad"),
+    ])
     private let fpsButton = NSButton(checkboxWithTitle: "Show FPS", target: nil, action: nil)
     private var shownFPS = false
 
@@ -80,9 +85,9 @@ final class SettingsSheet: NSObject {
     private var saveButton: NSButton!
 
     private var menus: [Menu] {
-        [resolution, frameRate, aspect, antialiasing, upscale, anisotropic, language, vibration, deadzone]
+        [resolution, frameRate, aspect, antialiasing, upscale, anisotropic, language, vibration, deadzone, shakeButton]
     }
-    private var toggles: [Toggle] { [vsync, fullscreen, audio, controllerQuit] }
+    private var toggles: [Toggle] { [vsync, fullscreen, audio, controllerQuit, motion] }
 
     /// The controller's focus order: the sheet top to bottom, as Tab goes.
     var controllerScreen: ControllerNavigator.Screen {
@@ -90,8 +95,8 @@ final class SettingsSheet: NSObject {
             window: panel,
             controls: [resolution.button, frameRate.button, vsync.button, fullscreen.button, aspect.button,
                        antialiasing.button, upscale.button, anisotropic.button, language.button, audio.button,
-                       fpsButton, vibration.button, deadzone.button, controllerQuit.button,
-                       revealButton, cancelButton, saveButton],
+                       fpsButton, vibration.button, deadzone.button, controllerQuit.button, motion.button,
+                       shakeButton.button, revealButton, cancelButton, saveButton],
             initial: resolution.button,
             cancel: { [weak self] in self?.cancelButton.performClick(nil) })
     }
@@ -161,6 +166,8 @@ final class SettingsSheet: NSObject {
             labelled("Vibration:", vibration.button),
             labelled("Stick dead zone:", deadzone.button),
             [NSGridCell.emptyContentView, controllerQuit.button],
+            [NSGridCell.emptyContentView, motion.button],
+            labelled("Shake button:", shakeButton.button),
         ]
         grid = NSGridView(views: rows)
         grid.rowSpacing = 10
