@@ -32,7 +32,7 @@ struct Case {
     Pairs published;    // environment variable -> value after load()
 };
 
-const char* const watched[] = {"PAIN_FRAME_RATE", "PAIN_VBLANK_MS", "PAIN_SIM_STEPS"};
+const char* const watched[] = {"PAIN_FRAME_RATE", "PAIN_VBLANK_MS", "PAIN_SIM_STEPS", "PS3_MUTE", "PS3_NO_AUDIO"};
 
 int run_case(const Case& test, const std::string& dir)
 {
@@ -56,8 +56,9 @@ int run_case(const Case& test, const std::string& dir)
     }
     for (const auto& [name, want] : test.published) {
         const char* got = std::getenv(name);
-        if (!got || std::strcmp(got, want) != 0) {
-            std::printf("FAIL %s: %s = %s, expected %s\n", test.name, name, got ? got : "<unset>", want);
+        if (want ? !got || std::strcmp(got, want) != 0 : got != nullptr) {   // nullptr: must stay unset
+            std::printf("FAIL %s: %s = %s, expected %s\n", test.name, name, got ? got : "<unset>",
+                        want ? want : "<unset>");
             ++failures;
         }
     }
@@ -119,6 +120,14 @@ int main()
          {{"frame_rate", "30"}, {"vblank_ms", "16.667"}, {"sim_steps", "2"}}, {}},
         {"out_of_range_vblank_uses_frame_rate", "[settings]\nframe_rate = 60\nvblank_ms = 3.5\n", {},
          {{"vblank_ms", "8.333"}, {"sim_steps", "1"}}, {}},
+        // audio = off mutes the device; it must not send PAIN down its
+        // no-audio path (PS3_NO_AUDIO), which crashes it.
+        {"ini_audio_off_mutes", "[settings]\naudio = off\n", {},
+         {{"audio", "off"}}, {{"PS3_MUTE", "1"}, {"PS3_NO_AUDIO", nullptr}}},
+        {"ini_audio_on_unmutes", "[settings]\naudio = on\n", {{"PS3_MUTE", "1"}},
+         {{"audio", "on"}}, {{"PS3_MUTE", nullptr}}},
+        {"env_mute_is_audio_off", nullptr, {{"PS3_MUTE", "1"}},
+         {{"audio", "off"}}, {{"PS3_MUTE", "1"}}},
     };
 
     int failed = 0;

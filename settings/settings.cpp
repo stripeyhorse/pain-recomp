@@ -47,7 +47,7 @@ constexpr std::array options{
     Option{"res_scale", "PS3_RES_SCALE", "1", Kind::number, .5, 3},
     Option{"upscale", "PS3_UPSCALE", "off", Kind::upscale},
     Option{"language", "PS3_LANG", "auto", Kind::language},
-    Option{"audio", "PS3_NO_AUDIO", "on", Kind::presence},
+    Option{"audio", "PS3_MUTE", "on", Kind::presence},
     Option{"metal_headless", "PS3RECOMP_METAL_HEADLESS", "off", Kind::toggle},
     Option{"metal_guest_programs", "PS3RECOMP_METAL_FIXED_FUNCTION", "on", Kind::inverted_toggle},
     Option{"vulkan_window", "PS3RECOMP_VK_WINDOW", "off", Kind::toggle},

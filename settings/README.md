@@ -36,7 +36,7 @@ updates the INI.
 | `res_scale` | 0.5 to 3 | Sets `PS3_RES_SCALE`. Metal register-file renderer: internal resolution as a multiple of the guest's, for colour and depth targets. 1 is the guest's own size. Startup only. |
 | `upscale` | off, metalfx | Sets `PS3_UPSCALE`. Metal windowed present through the MetalFX spatial scaler instead of the bilinear sample; falls back with one log line if unavailable. Startup only. |
 | `language` | auto, PS3 language code or ID | System language reported to PAIN. Available translations depend on the disc. |
-| `audio` | on, off | Starts with normal audio or reports audio unavailable to PAIN. |
+| `audio` | on, off | Sets `PS3_MUTE`. Off silences the output device; PAIN's audio still runs and paces as normal. |
 | `metal_headless`, `metal_guest_programs` | on, off | Select Metal output and guest shader use. Shader translation needs the toolkit dependencies. |
 | `vulkan_window`, `vulkan_guest_programs` | on, off | Select Vulkan window output and guest shader use. Shader translation needs the toolkit dependencies. |
 | `unlock_trainer` | on, off | Sets `PAIN_UNLOCK_ALL` for the optional guarded lift. |
