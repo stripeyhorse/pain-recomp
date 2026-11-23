@@ -256,6 +256,13 @@ final class Launcher: NSObject, NSApplicationDelegate {
                                            attributes: [.posixPermissions: 0o700])) != nil {
                 environment["PS3RECOMP_MSL_CACHE"] = environment["PS3RECOMP_MSL_CACHE"] ?? cache.path
             }
+            // Pipelines built during play are recorded here and prepared before Play on the next
+            // start, and the prepared ones are kept as a Metal binary archive for this Mac.
+            let pipelines = state.appendingPathComponent("Shader Cache/Pipelines", isDirectory: true)
+            if (try? files.createDirectory(at: pipelines, withIntermediateDirectories: true,
+                                           attributes: [.posixPermissions: 0o700])) != nil {
+                environment["PS3RECOMP_PIPELINE_CACHE"] = environment["PS3RECOMP_PIPELINE_CACHE"] ?? pipelines.path
+            }
         }
         let hdd1 = state.appendingPathComponent("hdd1", isDirectory: true)
         do {
