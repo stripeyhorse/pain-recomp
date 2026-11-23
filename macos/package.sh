@@ -26,14 +26,15 @@ helpers="$bundle/Helpers"
 # The release version, in one place: the archive name and Info.plist. The
 # launcher passes CFBundleShortVersionString to the runner as PAIN_BUILD,
 # which logs it at startup as "[build] PAIN <version>".
-version=0.2.14
-bundle_version=20261123.2
+version=0.2.15
+bundle_version=20261123.3
 archive="$stage/PAIN-MacBook-$version-arm64.zip"
 
 [[ ! -e "$app" && ! -e "$archive" ]]
 mkdir -p "$bundle/MacOS" "$resources/Licences" "$frameworks" "$helpers"
 xcrun swiftc -swift-version 5 -target arm64-apple-macos27.0 -O \
-    "$here/Launcher.swift" -o "$bundle/MacOS/PAIN"
+    "$here/main.swift" "$here/Launcher.swift" "$here/SettingsSheet.swift" "$here/SettingsFile.swift" \
+    -o "$bundle/MacOS/PAIN"
 install -m 755 "$runner" "$helpers/PainRecomp"
 install_name_tool -rpath "$prefix/lib" '@executable_path/../Frameworks' "$helpers/PainRecomp"
 for library in libSDL2-2.0.0.dylib libspirv-cross-c-shared.0.dylib; do

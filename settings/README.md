@@ -11,6 +11,12 @@ values and native-menu diagnostics.
 environment, it replaces the value `frame_rate` chose for it, and the
 other keeps the `frame_rate` value.
 
+The Mac launcher's **Settings…** sheet edits this file. It covers
+`res_scale`, `frame_rate`, `vsync`, `fullscreen`, `aspect`, `aa`, `upscale`,
+`anisotropic`, `language` and `audio`, and writes only the keys the player
+changes, in place, as the game's own menu does. Changing the frame rate
+there also comments out active `vblank_ms` and `sim_steps` lines.
+
 PAIN's Audio and Controller screens live under **Extras** and in the pause
 menu. PAIN handles its audio sliders and profile itself. On BCES00548,
 **Sync Rate** follows Volume in Audio. Highlight it and press Cross to cycle

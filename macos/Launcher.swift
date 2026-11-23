@@ -14,7 +14,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private let files = FileManager.default
     private let bundle = Bundle.main
     private let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 510, height: 188),
+        contentRect: NSRect(x: 0, y: 0, width: 510, height: 158),
         styleMask: [.titled, .closable, .miniaturizable],
         backing: .buffered, defer: false
     )
@@ -24,7 +24,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private var chooseButton: NSButton!
     private var playButton: NSButton!
     private var logButton: NSButton!
-    private var fpsButton: NSButton!
+    private var settingsButton: NSButton!
     private var selection: Selection?
     private var activeProcess: Process?
     private var currentLog: URL?
@@ -40,6 +40,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
     }()
 
     private var logs: URL { state.appendingPathComponent("logs", isDirectory: true) }
+    private var settingsFile: URL { state.appendingPathComponent("settings.ini") }
+    private lazy var settingsSheet = SettingsSheet(url: settingsFile)
     private var resources: URL { bundle.resourceURL! }
     private var helpers: URL { bundle.bundleURL.appendingPathComponent("Contents/Helpers", isDirectory: true) }
 
@@ -98,21 +100,19 @@ final class Launcher: NSObject, NSApplicationDelegate {
         playButton = NSButton(title: "Play", target: self, action: #selector(play))
         playButton.keyEquivalent = "\r"
         logButton = NSButton(title: "Show Log", target: self, action: #selector(showLog))
-        fpsButton = NSButton(checkboxWithTitle: "Show FPS", target: self, action: #selector(saveFPSChoice))
-        fpsButton.state = UserDefaults.standard.bool(forKey: "showFPS") ? .on : .off
-        fpsButton.toolTip = "Show display and game FPS in the game window title."
+        settingsButton = NSButton(title: "Settings…", target: self, action: #selector(showSettings))
         progress.style = .spinning
         progress.controlSize = .small
         progress.isDisplayedWhenStopped = false
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let actions = NSStackView(views: [chooseButton, logButton, spacer, progress, playButton])
+        let actions = NSStackView(views: [chooseButton, logButton, settingsButton, spacer, progress, playButton])
         actions.orientation = .horizontal
         actions.alignment = .centerY
         actions.spacing = 10
 
-        let layout = NSStackView(views: [sourceLabel, statusLabel, fpsButton, actions])
+        let layout = NSStackView(views: [sourceLabel, statusLabel, actions])
         layout.orientation = .vertical
         layout.alignment = .leading
         layout.spacing = 12
@@ -155,7 +155,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
 
     private func updateButtons() {
         chooseButton.isEnabled = activeProcess == nil
-        fpsButton.isEnabled = activeProcess == nil
+        settingsButton.isEnabled = activeProcess == nil
         playButton.isEnabled = activeProcess == nil && selection != nil
         logButton.isEnabled = currentLog != nil || files.fileExists(atPath: logs.path)
     }
@@ -233,14 +233,14 @@ final class Launcher: NSObject, NSApplicationDelegate {
             return
         }
         environment["PS3_HDD1_ROOT"] = hdd1.path
-        if fpsButton.state == .on {
+        if UserDefaults.standard.bool(forKey: "showFPS") {
             environment["PS3RECOMP_METAL_FPS"] = "1"
             environment["AUDIO_RATE"] = "1"
         }
         environment["PS3_TITLE"] = "PAIN"
         environment["PAIN_BUILD"] = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
         environment["PS3_GAMEDATA_ROOT"] = state.appendingPathComponent("gamedata").path
-        environment["PAIN_SETTINGS_PATH"] = state.appendingPathComponent("settings.ini").path
+        environment["PAIN_SETTINGS_PATH"] = settingsFile.path
         environment["PAIN_LEVELSCRIPT_DIR"] = selection.preparedURL.appendingPathComponent("levels").path
         process.environment = environment
         let began = Date()
@@ -326,8 +326,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
         updateButtons()
     }
 
-    @objc private func saveFPSChoice() {
-        UserDefaults.standard.set(fpsButton.state == .on, forKey: "showFPS")
+    @objc private func showSettings() {
+        settingsSheet.present(on: window)
     }
 
     @objc private func showLog() {
@@ -340,9 +340,3 @@ final class Launcher: NSObject, NSApplicationDelegate {
         }
     }
 }
-
-let app = NSApplication.shared
-let launcher = Launcher()
-app.setActivationPolicy(.regular)
-app.delegate = launcher
-app.run()
