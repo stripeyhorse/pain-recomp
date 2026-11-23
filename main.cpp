@@ -47,9 +47,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <atomic>
 #include <chrono>
+#include <cstring>
 #include <thread>
 #include "ps3emu/thread_name.h"   /* ps3_thread_name: every platform; a no-op where there is no API */
+#include "ps3emu/ps3_ftrace.h"    /* PS3_FTRACE: the frame-pacing spans below */
 
 #ifndef _WIN32
 #include "posix_mmap.h"   /* mmap: the guest arena, see alloc_guest_vm */
@@ -129,6 +132,8 @@ void     cellGcm_fifo_kick_wait(unsigned ms); /* wake early for a pending fence 
 unsigned cellGcm_flip_request_count(void);
 void     cellGcm_set_vblank_observer(void (*)(uint32_t opd, uint32_t count,
                                           uint32_t burst_index, uint32_t age_us));
+void     ppu_register_function(uint64_t addr, void (*fn)(ppu_context*));
+void     cellGcm_pace_counters(uint64_t* out, unsigned n);
 }
 
 /* ---------------------------------------------------------------------------
@@ -207,6 +212,128 @@ extern "C" unsigned ppu_boot_frames_presented(void)
     return (unsigned)g_frames_presented;
 }
 
+/* PS3_FTRACE kinds of the port's own, past the toolkit's (cellGcmSys.c uses
+ * 20-26): the host present of a guest flip, and two BCES00548 functions the
+ * frame loop calls through its vtables -- the frame semaphore wait
+ * (0x001988B0) and the render half of the frame driver (0x0019199C). */
+enum { pain_ft_sema_wait = 27, pain_ft_render = 28, pain_ft_present = 30 };
+
+/* PS3_VBLANK_STATS=1: where each frame's time went, from the main thread at
+ * its frame boundary (the return of the frame semaphore wait). A frame whose
+ * wait returned at once (under 0.5 ms) found its vblank token already posted:
+ * it overran. "Late" frames are the ones longer than two vblanks plus 1.5 ms.
+ * Per frame, from the toolkit's counters: time the frame spun on the RSX
+ * reference, and how much of that the walker was idle (and idle at a park);
+ * time the walker sat at a park it had not yet seen patched; the frame
+ * clock's present. One [frame-pace] line every 10 s. */
+namespace frame_pace {
+bool on;
+thread_local bool in_render;
+uint64_t vblank_ns;
+std::atomic<uint64_t> present_ns{0};
+struct Sum {
+    uint64_t frames = 0, waited = 0, sem_ns = 0, interval_ns = 0, max_interval_ns = 0;
+    uint64_t spin_ns = 0, spin_idle_ns = 0, spin_parked_ns = 0, park_late_ns = 0, present_ns = 0;
+};
+struct Window { Sum all, late; uint64_t start_ns = 0; } window;
+uint64_t last_return_ns, last_counters[10], last_present_ns;
+
+uint64_t now_ns()
+{
+    return (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+void add(Sum& s, uint64_t sem, uint64_t interval, const uint64_t* d, uint64_t present)
+{
+    s.frames++;
+    s.waited += sem >= 500000;
+    s.sem_ns += sem;
+    s.interval_ns += interval;
+    if (interval > s.max_interval_ns) s.max_interval_ns = interval;
+    s.spin_ns += d[1]; s.spin_idle_ns += d[2]; s.spin_parked_ns += d[3]; s.park_late_ns += d[6];
+    s.present_ns += present;
+}
+
+void print(uint64_t now)
+{
+    const auto& a = window.all;
+    const auto& l = window.late;
+    const double f = a.frames ? double(a.frames) : 1, lf = l.frames ? double(l.frames) : 1;
+    const double secs = double(now - window.start_ns) / 1e9;
+    std::fprintf(stderr,
+        "[frame-pace] frames=%llu fps=%.2f waited=%llu sem_wait_ms=%.2f frame_ms=%.2f max=%.1f | per frame: "
+        "ref_spin_ms=%.2f (walker idle %.2f, at a park %.2f) park_unseen_ms=%.2f present_ms=%.2f | late=%llu: "
+        "frame_ms=%.2f ref_spin_ms=%.2f (walker idle %.2f, at a park %.2f) park_unseen_ms=%.2f present_ms=%.2f\n",
+        (unsigned long long)a.frames, a.frames / (secs > 0 ? secs : 1), (unsigned long long)a.waited,
+        a.sem_ns / f / 1e6, a.interval_ns / f / 1e6, a.max_interval_ns / 1e6,
+        a.spin_ns / f / 1e6, a.spin_idle_ns / f / 1e6, a.spin_parked_ns / f / 1e6, a.park_late_ns / f / 1e6,
+        a.present_ns / f / 1e6, (unsigned long long)l.frames, l.interval_ns / lf / 1e6, l.spin_ns / lf / 1e6,
+        l.spin_idle_ns / lf / 1e6, l.spin_parked_ns / lf / 1e6, l.park_late_ns / lf / 1e6, l.present_ns / lf / 1e6);
+}
+
+void frame_boundary(uint64_t entered, uint64_t returned)
+{
+    uint64_t c[10];
+    cellGcm_pace_counters(c, 10);
+    const uint64_t present = present_ns.load(std::memory_order_relaxed);
+    if (last_return_ns) {
+        uint64_t d[10];
+        for (int i = 0; i < 10; ++i) d[i] = c[i] - last_counters[i];
+        const uint64_t interval = returned - last_return_ns, sem = returned - entered;
+        add(window.all, sem, interval, d, present - last_present_ns);
+        if (interval > 2 * vblank_ns + 1500000) add(window.late, sem, interval, d, present - last_present_ns);
+    }
+    if (!window.start_ns) window.start_ns = returned;
+    if (returned - window.start_ns >= 10000000000ull) {
+        print(returned);
+        window = {};
+        window.start_ns = returned;
+    }
+    last_return_ns = returned;
+    last_present_ns = present;
+    std::memcpy(last_counters, c, sizeof c);
+}
+} // namespace frame_pace
+
+static void pain_frame_sema_wait_hook(ppu_context* ctx)
+{
+    const uint64_t t0 = frame_pace::now_ns(), ft0 = PS3_FT_ON() ? ps3_ft_now() : 0;
+    func_001988B0(ctx);
+    if (ft0) ps3_ft_span(pain_ft_sema_wait, (uint32_t)GetCurrentThreadId() & 0xFFu, 0, 0, ft0, ps3_ft_now());
+    /* Only the wait the render half of the frame makes (at 0x00191BDC) is
+     * the frame boundary; boot calls the same function on another thread. */
+    if (frame_pace::on && frame_pace::in_render) frame_pace::frame_boundary(t0, frame_pace::now_ns());
+}
+
+static void pain_render_hook(ppu_context* ctx)
+{
+    const uint64_t t0 = PS3_FT_ON() ? ps3_ft_now() : 0;
+    const bool outer = !frame_pace::in_render;
+    frame_pace::in_render = true;
+    func_0019199C(ctx);
+    if (outer) frame_pace::in_render = false;
+    if (t0) ps3_ft_span(pain_ft_render, (uint32_t)GetCurrentThreadId() & 0xFFu, 0, 0, t0, ps3_ft_now());
+}
+
+/* Only with PS3_FTRACE or PS3_VBLANK_STATS set: the wrappers call the lifted
+ * functions unchanged and only read the clock around them. */
+static void install_frame_trace_hooks()
+{
+    const char* ft = getenv("PS3_FTRACE");
+    const char* st = getenv("PS3_VBLANK_STATS");
+    const bool trace = ft && *ft;
+    frame_pace::on = st && *st && *st != '0';
+    if (frame_pace::on) {
+        const char* v = getenv("PAIN_VBLANK_MS");
+        const double ms = v ? strtod(v, NULL) : 16.667;
+        frame_pace::vblank_ns = (uint64_t)((ms >= 4.0 ? ms : 4.0) * 1e6);
+    }
+    if (trace || frame_pace::on) ppu_register_function(0x001988B0, pain_frame_sema_wait_hook);
+    if (trace || frame_pace::on) ppu_register_function(0x0019199C, pain_render_hook);
+    if (frame_pace::on) std::fprintf(stderr, "[frame-pace] on, vblank %.3f ms\n", frame_pace::vblank_ns / 1e6);
+}
+
 static void present_guest_frame(void)
 {
     using clock = std::chrono::steady_clock;
@@ -221,7 +348,11 @@ static void present_guest_frame(void)
         std::this_thread::sleep_until(next_present);
         next_present = clock::now() + std::chrono::nanoseconds(1'000'000'000 / cap);
     }
+    const uint64_t ft0 = PS3_FT_ON() ? ps3_ft_now() : 0;
+    const uint64_t pace0 = frame_pace::on ? frame_pace::now_ns() : 0;
     rsx_backend_present();
+    if (pace0) frame_pace::present_ns.fetch_add(frame_pace::now_ns() - pace0, std::memory_order_relaxed);
+    if (ft0) ps3_ft_span(pain_ft_present, 0, 0, 0, ft0, ps3_ft_now());
     /* This thread increments and guest threads read, so interlocked rather
      * than a volatile ++, which on arm64 is neither atomic nor a fence. */
     InterlockedIncrement(&g_frames_presented);
@@ -628,6 +759,7 @@ int main(int argc, char** argv)
     pain_save_art::load(ppu_vfs_root);
     install_unlock_trainer();
     install_sim_steps();
+    install_frame_trace_hooks();
     pain_settings::install_native_hooks();
     ps3_load_prx_modules();  /* this game's lifted system PRX, if it has any */
     ppu_hle_init();          /* firmware import NID -> HLE handlers */
