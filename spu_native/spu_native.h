@@ -11,7 +11,7 @@
  *     continuation functions, or the native form is not entered.
  *
  * PAIN_SPU_NATIVE (read once): unset or 1 = every loop, 0 = none (the original lifted
- * path, same binary), or a comma list of names: table, cull. The step and pc-sampling
+ * path, same binary), or a comma list of names: table, cull, clear. The step and pc-sampling
  * diagnostics (SPU_STEPTRACE, SPU_PCSAMPLE, SPU_LOCKSTEP) and SPU_FLOATFIX_STATS turn every
  * loop off, since they count lifted instructions or float fix-ups the native forms skip. */
 #ifndef PAIN_SPU_NATIVE_H
@@ -24,6 +24,7 @@
 enum {
     PAIN_NATIVE_TABLE = 1u << 0,   /* ICE mesh: index-table fill at LS 0x07D70 */
     PAIN_NATIVE_CULL  = 1u << 1,   /* MainSpurs culling: plane loop at LS 0x046C0 */
+    PAIN_NATIVE_CLEAR = 1u << 2,   /* ICE mesh: word clear at LS 0x04E4C */
 };
 
 /* One cache for every patched TU of the program (weak, like the SDK's diagnostic gates). */
@@ -32,9 +33,9 @@ SPU_GATE int pain_spu_native_cached = -1;
 static SPU_NOINLINE_COLD unsigned pain_spu_native_parse(void)
 {
     static const struct { const char* name; unsigned bit; } k_items[] = {
-        { "table", PAIN_NATIVE_TABLE }, { "cull", PAIN_NATIVE_CULL },
+        { "table", PAIN_NATIVE_TABLE }, { "cull", PAIN_NATIVE_CULL }, { "clear", PAIN_NATIVE_CLEAR },
     };
-    const unsigned all = PAIN_NATIVE_TABLE | PAIN_NATIVE_CULL;
+    const unsigned all = PAIN_NATIVE_TABLE | PAIN_NATIVE_CULL | PAIN_NATIVE_CLEAR;
     const char* e = getenv("PAIN_SPU_NATIVE");
     unsigned mask = all;
     if (e && !strcmp(e, "0")) mask = 0;
@@ -49,8 +50,9 @@ static SPU_NOINLINE_COLD unsigned pain_spu_native_parse(void)
     const char* ff = getenv("SPU_FLOATFIX_STATS");
     if (getenv("SPU_STEPTRACE") || getenv("SPU_PCSAMPLE") || getenv("SPU_LOCKSTEP") || (ff && ff[0] == '1'))
         mask = 0;
-    fprintf(stderr, "[spu-native] PAIN_SPU_NATIVE=%s: table %s, cull %s\n", e ? e : "(default)",
-            (mask & PAIN_NATIVE_TABLE) ? "on" : "off", (mask & PAIN_NATIVE_CULL) ? "on" : "off");
+    fprintf(stderr, "[spu-native] PAIN_SPU_NATIVE=%s: table %s, cull %s, clear %s\n", e ? e : "(default)",
+            (mask & PAIN_NATIVE_TABLE) ? "on" : "off", (mask & PAIN_NATIVE_CULL) ? "on" : "off",
+            (mask & PAIN_NATIVE_CLEAR) ? "on" : "off");
     __atomic_store_n(&pain_spu_native_cached, (int)mask, __ATOMIC_RELAXED);
     return mask;
 }

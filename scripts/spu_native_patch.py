@@ -28,6 +28,17 @@ PATCHES = {
             "        ctx->gpr[7] = spu_il(0);\nloc_00007D9C:\n",
             "        ctx->gpr[7] = spu_il(0);\n        pain_native_index_table(ctx);\nloc_00007D9C:\n",
         )],
+    }, {
+        "function": "00004E4C",
+        "sha256": "ce082197449000cf1b19b96328fe68d33b54e1d43a1439e4b6bde570d65f0561",
+        "include": "ice_word_clear.inc",
+        # The rest of this function calls on into the job, so the whole-function fixture cannot
+        # run it; spu_native/tests/word_clear_test.c checks the loop itself, stock against native.
+        "fixture": False,
+        "edits": [(
+            "(spu_context* ctx) {\nloc_00004E4C:\n",
+            "(spu_context* ctx) {\n        pain_native_word_clear(ctx);\nloc_00004E4C:\n",
+        )],
     }],
     "jobmod_fee160dc063c_e0F78": [{
         "function": "00004630",
@@ -84,6 +95,8 @@ def main():
     includes = ['#include "spu_native.h"\n']
     fixture = []
     for patch in PATCHES[args.image]:
+        if args.fixture and not patch.get("fixture", True):
+            continue
         name = prefix + patch["function"]
         start, stop = function_span(code, name)
         body = code[start:stop]

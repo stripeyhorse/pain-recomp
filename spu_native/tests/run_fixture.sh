@@ -15,5 +15,7 @@ for v in "opt:-O2" "san:-O1 -g -fsanitize=address,undefined -fno-sanitize-recove
   name=${v%%:*}; flags=${v#*:}
   $cc "${base[@]}" $flags "${inc[@]}" "$here/spu_native_fixture.c" -lm -o "$out/fixture-$name"
   echo "== $name"; "$out/fixture-$name" ${FIXTURE_TIMINGS:+t} || rc=1
+  $cc "${base[@]}" $flags -I"$root/spu_native" -I"$sdk/runtime/spu" -I"$sdk/include" "$here/word_clear_test.c" -lm -o "$out/word-clear-$name"
+  "$out/word-clear-$name" || rc=1
 done
 exit $rc
