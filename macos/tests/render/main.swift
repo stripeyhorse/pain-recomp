@@ -65,18 +65,75 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let appearances: [(String, NSAppearance)] = [("light", NSAppearance(named: .aqua)!), ("dark", NSAppearance(named: .darkAqua)!)]
 
-// The launcher window, ready to play: a stand-in prepared game.
-let game = state.appendingPathComponent("fake-game", isDirectory: true)
-for file in ["disc/PARAM.SFO", "disc/USRDIR/CacheData.pak", "prepared/EBOOT.elf",
-             "prepared/hdd0/game/BCES00548/USRDIR/CacheFlags/CacheDone.flg"] {
-    let url = game.appendingPathComponent(file)
-    try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    FileManager.default.createFile(atPath: url.path, contents: Data())
-}
-let selection = ["source": "/Users/player/Downloads/PAIN BCES00548.zip",
-                 "disc": game.appendingPathComponent("disc").path, "prepared": game.appendingPathComponent("prepared").path]
-try! JSONSerialization.data(withJSONObject: selection).write(to: state.appendingPathComponent("selection.json"))
+// MARK: - The launcher window in each state
+
 let launcher = Launcher()
+
+/// A stand-in prepared game. Its disc art is the player's own, copied from
+/// PAIN_RENDER_ART (a PS3_GAME folder) into the temporary state, or a plain
+/// stand-in image when that is not set; the repository holds no game art.
+func makeGame(_ name: String, art: [String]) -> URL {
+    let game = state.appendingPathComponent(name, isDirectory: true)
+    for file in ["disc/PARAM.SFO", "disc/USRDIR/CacheData.pak", "prepared/EBOOT.elf",
+                 "prepared/hdd0/game/BCES00548/USRDIR/CacheFlags/CacheDone.flg"] {
+        let url = game.appendingPathComponent(file)
+        try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: url.path, contents: Data())
+    }
+    for file in art {
+        let target = game.appendingPathComponent("disc/" + file)
+        if let dir = ProcessInfo.processInfo.environment["PAIN_RENDER_ART"] {
+            try! FileManager.default.copyItem(at: URL(fileURLWithPath: dir).appendingPathComponent(file), to: target)
+        } else {
+            let size = file == "PIC1.PNG" ? NSSize(width: 1920, height: 1080) : NSSize(width: 320, height: 176)
+            let image = NSImage(size: size, flipped: false) { rect in
+                NSGradient(starting: .darkGray, ending: .lightGray)!.draw(in: rect, angle: -90)
+                return true
+            }
+            let bitmap = NSBitmapImageRep(data: image.tiffRepresentation!)!
+            try! bitmap.representation(using: .png, properties: [:])!.write(to: target)
+        }
+    }
+    return game
+}
+
+func select(_ game: URL?, source: String = "/Users/player/Downloads/PAIN BCES00548.zip") {
+    let file = state.appendingPathComponent("selection.json")
+    if let game {
+        let selection = ["source": source, "disc": game.appendingPathComponent("disc").path,
+                         "prepared": game.appendingPathComponent("prepared").path]
+        try! JSONSerialization.data(withJSONObject: selection).write(to: file)
+    } else {
+        try? FileManager.default.removeItem(at: file)
+    }
+    launcher.refreshSelection()
+}
+
+/// Visible text and buttons that don't fit their frames.
+func clipped(_ root: NSView) -> [String] {
+    views(in: root).filter { !$0.isHiddenOrHasHiddenAncestor }.compactMap { view in
+        guard let control = view as? NSControl else { return nil }
+        let fits: Bool
+        if let field = control as? NSTextField, field.cell?.wraps == true {
+            let needed = field.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: field.frame.width, height: 10_000))
+            fits = needed.height <= field.frame.height + 0.5
+        } else {
+            fits = control.intrinsicContentSize.width <= control.frame.width + 0.5 &&
+                (control.intrinsicContentSize.height < 0 || control.intrinsicContentSize.height <= control.frame.height + 0.5)
+        }
+        return fits ? nil : "\(control.stringValue.isEmpty ? (control as? NSButton)?.title ?? "" : control.stringValue) " +
+            "\(control.intrinsicContentSize) in \(control.frame.size)"
+    }
+}
+
+let withArt = makeGame("game-art", art: ["PIC1.PNG", "ICON0.PNG"])
+let iconOnly = makeGame("game-icon", art: ["ICON0.PNG"])
+let noArt = makeGame("game-no-art", art: [])
+var spoken: [String] = []
+launcher.announce = { text, urgent in spoken.append((urgent ? "! " : "") + text) }
+try! JSONSerialization.data(withJSONObject: ["source": "/Users/player/Downloads/PAIN BCES00548.zip",
+    "disc": withArt.appendingPathComponent("disc").path, "prepared": withArt.appendingPathComponent("prepared").path])
+    .write(to: state.appendingPathComponent("selection.json"))
 launcher.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 let main = NSApp.windows.first { $0.title == "PAIN" }!
 main.orderOut(nil)
@@ -84,9 +141,165 @@ let settingsButton = views(in: main.contentView!).compactMap { $0 as? NSButton }
 check("main window has an enabled Settings… button", settingsButton?.isEnabled == true)
 check("Show FPS left the main window",
       !views(in: main.contentView!).contains { ($0 as? NSButton)?.title == "Show FPS" })
-for (name, appearance) in appearances {
-    render(main.contentView!, appearance, "main-window-\(name)")
+
+func waitFor(_ seconds: TimeInterval = 15, _ condition: () -> Bool) -> Bool {
+    let end = Date().addingTimeInterval(seconds)
+    while !condition() && Date() < end { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
+    return condition()
 }
+let mainButton = { (title: String) in views(in: main.contentView!).compactMap { $0 as? NSButton }.first { $0.title == title }! }
+let play = mainButton("Play")
+let banner = views(in: main.contentView!).compactMap { $0 as? BannerView }.first!
+let bar = views(in: main.contentView!).compactMap { $0 as? NSProgressIndicator }.first { !$0.isIndeterminate }!
+let activity = views(in: main.contentView!).compactMap { $0 as? NSProgressIndicator }.first { $0.isIndeterminate }!
+func shown(_ text: String) -> Bool {
+    views(in: main.contentView!).contains { ($0 as? NSTextField)?.stringValue == text && !$0.isHiddenOrHasHiddenAncestor }
+}
+/// Renders the main window in both appearances and checks its text fits.
+func renderMain(_ name: String) {
+    // The bar animates to a new value.
+    RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+    main.contentView!.layoutSubtreeIfNeeded()
+    for (appearanceName, appearance) in appearances {
+        main.appearance = appearance
+        main.contentView!.layoutSubtreeIfNeeded()
+        check("no clipped text, \(name) \(appearanceName)", clipped(main.contentView!).isEmpty,
+              clipped(main.contentView!).joined(separator: "; "))
+        render(main.contentView!, appearance, "main-\(name)-\(appearanceName)")
+    }
+    main.appearance = nil
+}
+
+check("the banner is up when the window opens, before the art is decoded", !banner.isHidden && banner.frame.height == 240)
+check("the art arrives off the main thread", waitFor { banner.art != nil })
+check("PIC1 fills the banner", banner.art?.fills == true && banner.art?.image.width == 1280)
+let dockIcon = state.appendingPathComponent("Dock Icon.png")
+check("a Dock icon made from ICON0", FileManager.default.fileExists(atPath: dockIcon.path) &&
+      NSApp.applicationIconImage?.size == NSSize(width: 512, height: 512))
+try? FileManager.default.copyItem(at: dockIcon, to: out.appendingPathComponent("dock-icon.png"))
+check("Play's bezel is the darkened accent", play.bezelColor === Launcher.defaultBezel && mainButton("Choose Game…").bezelColor == nil)
+renderMain("idle")
+let fullHeight = main.frame.height
+print("main window: \(Int(main.frame.width)) x \(Int(fullHeight)) pt with the banner")
+check("Play is the default button, large, and enabled", play.keyEquivalent == "\r" && play.controlSize == .large &&
+      play.isEnabled && mainButton("Choose Game…").keyEquivalent.isEmpty)
+check("Escape is on no button", !views(in: main.contentView!).contains { ($0 as? NSButton)?.keyEquivalent == "\u{1b}" })
+check("idle: title and disc ID, nothing else", shown("PAIN") && shown("BCES00548") && launcher.status == .title)
+check("the chosen file is on Choose Game…", mainButton("Choose Game…").toolTip == "/Users/player/Downloads/PAIN BCES00548.zip" &&
+      mainButton("Choose Game…").accessibilityHelp() == "Current game: PAIN BCES00548.zip")
+var keyLoop: [String] = []
+var key: NSView? = main.initialFirstResponder
+while let current = key as? NSButton, !keyLoop.contains(current.title) { keyLoop.append(current.title); key = current.nextKeyView }
+check("Tab starts at Play and runs the row", keyLoop == ["Play", "Choose Game…", "Settings…", "Show Log"], keyLoop.joined(separator: ", "))
+check("every main window control has an accessibility label", views(in: main.contentView!).compactMap { $0 as? NSButton }
+      .allSatisfy { !($0.accessibilityLabel() ?? $0.title).isEmpty })
+
+select(iconOnly)
+check("ICON0 when there is no PIC1", waitFor { banner.art?.fills == false })
+renderMain("idle-icon0")
+check("ICON0 keeps the banner's height", main.frame.height == fullHeight)
+
+select(noArt)
+check("no art: no banner", banner.isHidden && banner.art == nil)
+check("no art: no Dock icon left from the last disc", !FileManager.default.fileExists(atPath: dockIcon.path))
+renderMain("idle-no-art")
+let compactHeight = main.frame.height
+print("main window without art: \(Int(compactHeight)) pt")
+launcher.show(.problem("PAIN closed during launch or play (code 9). Open the log for details."))
+check("no art: an error keeps the height", main.frame.height == compactHeight)
+renderMain("error-no-art")
+
+select(nil)
+check("no game: Choose Game… takes Return and Play is off", mainButton("Choose Game…").keyEquivalent == "\r" &&
+      play.keyEquivalent.isEmpty && !play.isEnabled && shown("No game chosen"))
+renderMain("no-game")
+
+// Play, with a stand-in game that writes what the real one writes, one step at a time.
+select(withArt)
+_ = waitFor { banner.art != nil }
+let gameHelper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/PAIN.app/Contents/MacOS/PainRecomp")
+try! FileManager.default.createDirectory(at: gameHelper.deletingLastPathComponent(), withIntermediateDirectories: true)
+let steps = """
+    #!/bin/sh
+    step() { until [ -e "$PAIN_PREVIEW_DATA_DIR/step$1" ]; do sleep 0.05; done; }
+    echo "icon=$PS3RECOMP_APP_ICON"
+    step 1; echo "[shader-prep] Preparing shaders (80 of 163)" >&2; echo "[shader-prep] Preparing shaders (96 of 163)" >&2
+    step 2; echo "[shader-prep] Prepared 163 of 163 Metal pipelines before Play (shipped 150 of 150, learned 13 of 13) in 20113 ms" >&2
+    step 3; echo "[rsx] Metal backend init OK -- window open" >&2
+    step 4; exit 9
+
+    """
+try! steps.write(to: gameHelper, atomically: true, encoding: .utf8)
+chmod(gameHelper.path, 0o755)
+func step(_ n: Int) { FileManager.default.createFile(atPath: state.appendingPathComponent("step\(n)").path, contents: Data()) }
+spoken = []
+play.performClick(nil)
+check("Play: Starting…, indeterminate", launcher.status == .progress("Starting…") && bar.isHiddenOrHasHiddenAncestor &&
+      activity.accessibilityLabel() == "Starting" && !activity.isHiddenOrHasHiddenAncestor)
+check("loading: Play, Choose Game… and Settings… are off; Show Log is on", !play.isEnabled &&
+      !mainButton("Choose Game…").isEnabled && !mainButton("Settings…").isEnabled && mainButton("Show Log").isEnabled)
+check("loading: the title gives way to the progress", !shown("PAIN") && shown("Starting…"))
+renderMain("starting")
+check("starting keeps the window's height", main.frame.height == fullHeight)
+step(1)
+check("the count is read from the log", waitFor { launcher.status == .progress("Preparing shaders", done: 96, total: 163) })
+check("a determinate bar with its count", !bar.isHiddenOrHasHiddenAncestor && activity.isHiddenOrHasHiddenAncestor &&
+      bar.doubleValue == 96 && bar.maxValue == 163 &&
+      shown("Preparing shaders") && shown("96 of 163"))
+check("the bar's accessibility label and value", bar.accessibilityLabel() == "Preparing shaders" &&
+      bar.accessibilityValueDescription() == "96 of 163", "\(bar.accessibilityLabel() ?? "nil") \(bar.accessibilityValueDescription() ?? "nil")")
+renderMain("preparing")
+check("preparing keeps the window's height", main.frame.height == fullHeight)
+check("VoiceOver hears the start and the first count, not every count",
+      spoken == ["Starting", "Preparing shaders, 80 of 163"], spoken.joined(separator: " | "))
+step(2)
+check("after the last count: Starting… again", waitFor { launcher.status == .progress("Starting…") } &&
+      !activity.isHiddenOrHasHiddenAncestor && bar.isHiddenOrHasHiddenAncestor)
+check("the game gets the Dock icon", (try? String(contentsOf: state.appendingPathComponent("logs/game.log"), encoding: .utf8))?
+      .contains("icon=" + state.appendingPathComponent("Dock Icon.png").path) == true)
+// As the app runs: a regular app with its window up.
+NSApp.setActivationPolicy(.regular)
+main.orderFront(nil)
+step(3)
+check("the window hides and leaves the Dock when the game's window opens",
+      waitFor { !main.isVisible } && NSApp.activationPolicy() == .accessory)
+check("the app stays while the game runs with no window",
+      launcher.applicationShouldTerminateAfterLastWindowClosed(NSApp) == false)
+step(4)
+check("the window comes back, in the Dock, when the game ends", waitFor { play.isEnabled } && main.isVisible &&
+      NSApp.activationPolicy() == .regular)
+check("a failed run says so", launcher.status == .problem(
+    "PAIN closed during launch or play (code 9). Open the log for details."))
+check("errors are announced at once", spoken.last == "! PAIN closed during launch or play (code 9). Open the log for details.",
+      spoken.joined(separator: " | "))
+renderMain("error")
+check("an error keeps the window's height", main.frame.height == fullHeight)
+for n in 1...4 { try? FileManager.default.removeItem(at: state.appendingPathComponent("step\(n)")) }
+
+// Import, with a stand-in importer that fails with a long message.
+let python = Bundle.main.resourceURL!.appendingPathComponent("Python/bin/python3")
+try! FileManager.default.createDirectory(at: python.deletingLastPathComponent(), withIntermediateDirectories: true)
+try! """
+    #!/bin/sh
+    until [ -e "$PAIN_PREVIEW_DATA_DIR/import-done" ]; do sleep 0.05; done
+    echo "Error: The selected ZIP holds BLES00123, not PAIN (BCES00548). Choose the PAIN disc ZIP or the folder extracted from it, with PS3_GAME and PS3_DISC.SFB at its top level, then try again."
+    exit 1
+
+    """.write(to: python, atomically: true, encoding: .utf8)
+chmod(python.path, 0o755)
+launcher.importGame(URL(fileURLWithPath: "/Users/player/Downloads/Some Other Game.zip"))
+check("import: the same progress, indeterminate", launcher.status == .progress("Checking and preparing the selected files…") &&
+      !activity.isHiddenOrHasHiddenAncestor && !play.isEnabled && !mainButton("Choose Game…").isEnabled)
+renderMain("importing")
+check("importing keeps the window's height", main.frame.height == fullHeight)
+FileManager.default.createFile(atPath: state.appendingPathComponent("import-done").path, contents: Data())
+check("a long import error is shown whole, without its Error: prefix",
+      waitFor { if case .problem = launcher.status { return true }; return false } &&
+      shown("The selected ZIP holds BLES00123, not PAIN (BCES00548). Choose the PAIN disc ZIP or the folder extracted " +
+            "from it, with PS3_GAME and PS3_DISC.SFB at its top level, then try again."))
+renderMain("error-long")
+check("a long error keeps the window's height", main.frame.height == fullHeight)
+launcher.refreshSelection()
 
 // The sheet over a missing file: defaults, and Save writes nothing.
 try? FileManager.default.removeItem(at: settings)
@@ -224,10 +437,8 @@ func name(_ responder: NSResponder?) -> String {
     return (responder as? NSButton)?.title ?? "none"
 }
 
-func waitFor(_ seconds: TimeInterval = 15, _ condition: () -> Bool) -> Bool {
-    let end = Date().addingTimeInterval(seconds)
-    while !condition() && Date() < end { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
-    return condition()
+extension NSView {
+    var lastBaselineAnchorY: CGFloat { convert(NSPoint(x: 0, y: isFlipped ? bounds.height - lastBaselineOffsetFromBottom : lastBaselineOffsetFromBottom), to: nil).y }
 }
 
 /// Contrast ratio of two colours as drawn in an appearance (WCAG 2 formula).
@@ -252,7 +463,7 @@ func contrast(_ a: NSColor, on b: NSColor, _ appearance: NSAppearance) -> Double
 }
 
 // The game is a stand-in that exits after a second.
-let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/PainRecomp")
+let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/PAIN.app/Contents/MacOS/PainRecomp")
 try! FileManager.default.createDirectory(at: helper.deletingLastPathComponent(), withIntermediateDirectories: true)
 try! "#!/bin/sh\nexec sleep 1\n".write(to: helper, atomically: true, encoding: .utf8)
 chmod(helper.path, 0o755)
@@ -264,8 +475,6 @@ var now: TimeInterval = 1000
 nav.isActive = { active }
 nav.readPad = { pad }
 nav.clock = { now }
-let mainButton = { (title: String) in views(in: main.contentView!).compactMap { $0 as? NSButton }.first { $0.title == title }! }
-let play = mainButton("Play")
 func running() -> Bool { !play.isEnabled && !mainButton("Settings…").isEnabled }
 /// One pad reading at the next instant.
 func send(_ state: PadState, after seconds: TimeInterval = 0.02) {
@@ -275,16 +484,18 @@ func send(_ state: PadState, after seconds: TimeInterval = 0.02) {
 }
 
 nav.refresh()
+// The window opens with Play focused for Tab; the controller's first push shows where it is.
+main.makeFirstResponder(nil)
 check("controller armed once the pad is seen released", nav.armed)
 check("first direction focuses Play on the main window", nav.perform(.down) && name(main.firstResponder) == "Play",
       name(main.firstResponder))
 var mainOrder = [name(main.firstResponder)]
 while nav.perform(.left) { mainOrder.append(name(main.firstResponder)) }
-check("main window focus order visits every control once", Array(mainOrder.reversed()) == ["Choose Game…", "Show Log", "Settings…", "Play"],
+check("main window focus order visits every control once", Array(mainOrder.reversed()) == ["Choose Game…", "Settings…", "Show Log", "Play"],
       mainOrder.joined(separator: ", "))
 var downOrder = [name(main.firstResponder)]
 while nav.perform(.down) { downOrder.append(name(main.firstResponder)) }
-check("Down walks the same order", downOrder == ["Choose Game…", "Show Log", "Settings…", "Play"], downOrder.joined(separator: ", "))
+check("Down walks the same order", downOrder == ["Choose Game…", "Settings…", "Show Log", "Play"], downOrder.joined(separator: ", "))
 check("Circle does nothing on the main window", !nav.perform(.cancel))
 
 // Stick threshold, hysteresis and repeat (synthetic clock).
@@ -292,27 +503,28 @@ send(PadState())
 send(PadState(x: -0.45))
 check("stick below the threshold does nothing", name(main.firstResponder) == "Play")
 send(PadState(x: -0.6))
-check("stick past the threshold moves once", name(main.firstResponder) == "Settings…", name(main.firstResponder))
+check("stick past the threshold moves once", name(main.firstResponder) == "Show Log", name(main.firstResponder))
 send(PadState(x: -0.35), after: 0.1)
 send(PadState(x: -0.55), after: 0.1)
-check("wobbling above the release point is one push", name(main.firstResponder) == "Settings…", name(main.firstResponder))
+check("wobbling above the release point is one push", name(main.firstResponder) == "Show Log", name(main.firstResponder))
 nav.tick(at: now + 0.1)
-check("no repeat before the delay", name(main.firstResponder) == "Settings…")
+check("no repeat before the delay", name(main.firstResponder) == "Show Log")
 now += 0.25
 nav.tick(at: now)
-check("repeat after the delay", name(main.firstResponder) == "Show Log", name(main.firstResponder))
+check("repeat after the delay", name(main.firstResponder) == "Settings…", name(main.firstResponder))
 now += ControllerNavigator.repeatInterval
 nav.tick(at: now)
 check("repeat continues at the interval", name(main.firstResponder) == "Choose Game…", name(main.firstResponder))
 send(PadState(x: -0.2))
 send(PadState(y: -1))
 send(PadState(y: -1), after: 0.1)
-check("d-pad Down moves once per press", name(main.firstResponder) == "Show Log", name(main.firstResponder))
+check("d-pad Down moves once per press", name(main.firstResponder) == "Settings…", name(main.firstResponder))
 send(PadState())
 send(PadState(x: 1)); send(PadState())
-check("d-pad Right moves once", name(main.firstResponder) == "Settings…", name(main.firstResponder))
+check("d-pad Right moves once", name(main.firstResponder) == "Show Log", name(main.firstResponder))
 
 // Status line and focus ring on the main window.
+main.contentView!.layoutSubtreeIfNeeded()
 let layoutViews = views(in: main.contentView!).filter { $0 is NSButton || ($0 as? NSTextField)?.stringValue.isEmpty == false }
 let framesBefore = layoutViews.map { $0.convert($0.bounds, to: nil) }
 let status = ControllerInput.describe(name: "DualSense Wireless Controller", level: 0.8, state: .discharging)
@@ -326,15 +538,10 @@ check("status line is an accessibility element with a label",
       statusLine?.accessibilityLabel() == "Controller connected: DualSense Wireless Controller, 80% battery",
       statusLine?.accessibilityLabel() ?? "nil")
 check("status line moves nothing", layoutViews.map { $0.convert($0.bounds, to: nil) } == framesBefore)
-let statusText = views(in: main.contentView!).compactMap { $0 as? NSTextField }.first { $0.stringValue.hasPrefix("PAIN · BCES") }!
-let ready = statusText.stringValue
-statusText.stringValue = "PAIN closed during launch or play (code 1). Open the log for details. " +
-    "PAIN closed during launch or play (code 1). Open the log for details. PAIN closed during launch."
-main.contentView!.layoutSubtreeIfNeeded()
-check("status line stays inside the window under a three-line message",
-      statusLine.map { $0.convert($0.bounds, to: nil).minY >= 8 } == true,
-      statusLine.map { "\($0.convert($0.bounds, to: nil))" } ?? "")
-statusText.stringValue = ready
+check("the controller line keeps the window's height", main.frame.height == fullHeight)
+check("the controller line sits on the disc ID's baseline, at the right",
+      statusLine.map { abs($0.lastBaselineAnchorY - views(in: main.contentView!).compactMap { $0 as? NSTextField }
+          .first { $0.stringValue == "BCES00548" }!.lastBaselineAnchorY) < 0.5 } == true)
 check("battery wording", ControllerInput.describe(name: "Pad", level: 0.5, state: .charging).text == "Pad · 50% battery, charging" &&
       ControllerInput.describe(name: "Pad", level: 1, state: .full).text == "Pad · battery full" &&
       ControllerInput.describe(name: "Pad", level: 0, state: .unknown).text == "Pad" &&
@@ -342,13 +549,41 @@ check("battery wording", ControllerInput.describe(name: "Pad", level: 0.5, state
 check("focus ring view takes no clicks or accessibility focus",
       views(in: main.contentView!).compactMap { $0 as? FocusRingView }.first.map {
           $0.hitTest(NSPoint(x: 100, y: 50)) == nil && !$0.isAccessibilityElement() && !$0.acceptsFirstResponder } == true)
+renderMain("controller")
 for (appearanceName, appearance) in appearances {
-    render(main.contentView!, appearance, "main-window-controller-\(appearanceName)")
     let background = NSColor.windowBackgroundColor
-    let text = contrast(.labelColor, on: background, appearance), ring = contrast(.controlAccentColor, on: background, appearance)
-    print(String(format: "contrast \(appearanceName): status line %.2f:1, focus ring %.2f:1, existing grey status text %.2f:1",
-                 text, ring, contrast(.secondaryLabelColor, on: background, appearance)))
-    check("status line text at least 4.5:1 and focus ring at least 3:1, \(appearanceName)", text >= 4.5 && ring >= 3)
+    let text = contrast(statusLine!.textColor!, on: background, appearance)
+    let title = contrast(.labelColor, on: background, appearance)
+    let ring = contrast(.controlAccentColor, on: background, appearance)
+    let warning = contrast(.systemRed, on: background, appearance)
+    let playText = contrast(.white, on: Launcher.defaultBezel, appearance)
+    var accentFraction = 0
+    appearance.performAsCurrentDrawingAppearance {
+        accentFraction = Int((Launcher.darkened(NSColor.controlAccentColor.usingColorSpace(.sRGB)!).fraction * 100).rounded())
+    }
+    print(String(format: "contrast \(appearanceName): title and messages %.2f:1, secondary text (disc ID, count, controller) %.2f:1, " +
+                 "focus ring %.2f:1, error sign %.2f:1; secondaryLabelColor would be %.2f:1; Play's title on its bezel %.2f:1 " +
+                 "(on the plain accent %.2f:1, darkened %d%%)", title, text, ring, warning, contrast(.secondaryLabelColor, on: background, appearance),
+                 playText, contrast(.white, on: .controlAccentColor, appearance), accentFraction))
+    check("text at least 4.5:1, focus ring and error sign at least 3:1, \(appearanceName)",
+          text >= 4.5 && title >= 4.5 && ring >= 3 && warning >= 3 && playText >= 4.5)
+}
+// The other accent colours (the system colours they follow), and Increase Contrast.
+for (appearanceName, appearance) in appearances + [
+    ("light, increased contrast", NSAppearance(named: .accessibilityHighContrastAqua)!),
+    ("dark, increased contrast", NSAppearance(named: .accessibilityHighContrastDarkAqua)!)] {
+    var row: [String] = []
+    for (accentName, accent) in [("blue", NSColor.systemBlue), ("purple", .systemPurple), ("pink", .systemPink), ("red", .systemRed),
+                                 ("orange", .systemOrange), ("yellow", .systemYellow), ("green", .systemGreen),
+                                 ("graphite", .systemGray)] {
+        var resolved = accent
+        appearance.performAsCurrentDrawingAppearance { resolved = accent.usingColorSpace(.sRGB)! }
+        let (bezel, fraction) = Launcher.darkened(resolved)
+        let before = contrast(.white, on: resolved, appearance), after = contrast(.white, on: bezel, appearance)
+        row.append(String(format: "%@ %.2f→%.2f (%d%% darker)", accentName, before, after, Int((fraction * 100).rounded())))
+        check("white on the \(accentName) default button at least 4.5:1, \(appearanceName)", after >= 4.5)
+    }
+    print("Play bezel \(appearanceName): " + row.joined(separator: ", "))
 }
 launcher.showController(nil)
 check("no controller: no status line", statusLine?.isHiddenOrHasHiddenAncestor == true)
@@ -494,6 +729,9 @@ print("sheet height with the 60 FPS warning: \(Int(tallest)) pt")
 // A 13-inch MacBook Air at its default scale is 900 pt (older) or 956 pt tall; leave room for the menu bar and title bar.
 check("sheet fits a 13-inch display at default scale", tallest <= 900 - 40 - 28 - 40)
 panel.appearance = nil
+
+// With no game running the launcher quits at once (with one, it waits for the game: checked on a Mac with the real game).
+check("quit with no game running is immediate", launcher.applicationShouldTerminate(NSApp) == .terminateNow)
 
 print("\(failures) render harness checks failed")
 exit(failures == 0 ? 0 : 1)

@@ -23,6 +23,8 @@ bundle="$app/Contents"
 resources="$bundle/Resources"
 frameworks="$bundle/Frameworks"
 helpers="$bundle/Helpers"
+# The game is its own app inside the launcher, so the Dock and menu bar call it PAIN.
+game="$helpers/PAIN.app/Contents"
 # The release version, in one place: the archive name and Info.plist. The
 # launcher passes CFBundleShortVersionString to the runner as PAIN_BUILD,
 # which logs it at startup as "[build] PAIN <version>".
@@ -31,12 +33,12 @@ bundle_version=20261124.4
 archive="$stage/PAIN-MacBook-$version-arm64.zip"
 
 [[ ! -e "$app" && ! -e "$archive" ]]
-mkdir -p "$bundle/MacOS" "$resources/Licences" "$frameworks" "$helpers"
+mkdir -p "$bundle/MacOS" "$resources/Licences" "$frameworks" "$game/MacOS"
 xcrun swiftc -swift-version 5 -target arm64-apple-macos27.0 -O \
     "$here/main.swift" "$here/Launcher.swift" "$here/SettingsSheet.swift" "$here/SettingsFile.swift" \
     "$here/ControllerNavigator.swift" -o "$bundle/MacOS/PAIN"
-install -m 755 "$runner" "$helpers/PainRecomp"
-install_name_tool -rpath "$prefix/lib" '@executable_path/../Frameworks' "$helpers/PainRecomp"
+install -m 755 "$runner" "$game/MacOS/PainRecomp"
+install_name_tool -rpath "$prefix/lib" '@executable_path/../../../../Frameworks' "$game/MacOS/PainRecomp"
 for library in libSDL2-2.0.0.dylib libspirv-cross-c-shared.0.dylib; do
     install -m 755 "$prefix/lib/$library" "$frameworks/$library"
 done
@@ -85,9 +87,33 @@ cat > "$bundle/Info.plist" <<PLIST
 </plist>
 PLIST
 plutil -lint "$bundle/Info.plist"
-for binary in "$helpers/PainRecomp" "$frameworks/"*.dylib; do
+# The game's own bundle: same versions; it reads controllers through SDL's GameController backend.
+cat > "$game/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleDisplayName</key><string>PAIN</string>
+    <key>CFBundleExecutable</key><string>PainRecomp</string>
+    <key>CFBundleIdentifier</key><string>com.stripeyhorse.painrecomp</string>
+    <key>CFBundleName</key><string>PAIN</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>$version</string>
+    <key>CFBundleVersion</key><string>$bundle_version</string>
+    <key>GCSupportsControllerUserInteraction</key><true/>
+    <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
+    <key>LSMinimumSystemVersion</key><string>27.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+PLIST
+plutil -lint "$game/Info.plist"
+# Inside out: libraries, then the game's bundle, then the launcher's.
+for binary in "$frameworks/"*.dylib; do
     codesign --force --sign - "$binary"
 done
+codesign --force --sign - "$helpers/PAIN.app"
 codesign --force --sign - "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 ditto -c -k --norsrc --keepParent "$app" "$archive"

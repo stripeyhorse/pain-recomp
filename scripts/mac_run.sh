@@ -10,8 +10,9 @@ if [[ ! -x ./build/PainRecomp || ! -s "$elf" ||
     echo "Missing build or prepared disc/cache files. Run push_bobby.sh on the workstation and mac_build.sh on bobby." >&2
     exit 1
 fi
+# SIGTERM quits the way the window's close button does: up to 3 s, more for a save.
 if killall PainRecomp 2>/dev/null; then
-    sleep 1
+    for _ in $(seq 40); do pgrep -x PainRecomp >/dev/null || break; sleep 0.2; done
 fi
 nohup ./build/PainRecomp "$elf" > "$root/run_mac.log" 2>&1 &
 echo "launched pid $!"
