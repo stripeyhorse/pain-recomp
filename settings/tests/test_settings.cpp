@@ -35,7 +35,7 @@ struct Case {
 const char* const watched[] = {"PAIN_FRAME_RATE", "PAIN_VBLANK_MS", "PAIN_SIM_STEPS", "PS3_MUTE", "PS3_NO_AUDIO",
                                "PS3_SPURS_LANES_OF_2", "PAIN_TEST_PERF_CORES",
                                "PS3_PAD_DEADZONE", "PS3_PAD_RUMBLE", "PS3_PAD_QUIT", "PS3_PAD_MOTION",
-                               "PS3_PAD_SHAKE_BUTTON"};
+                               "PS3_PAD_SHAKE_BUTTON", "PS3RECOMP_PRESENT_INTERVAL_MS"};
 
 int run_case(const Case& test, const std::string& dir)
 {
@@ -210,6 +210,28 @@ int main()
          {{"motion", "on"}, {"shake_button", "off"}}, {{"PS3_PAD_MOTION", "1"}, {"PS3_PAD_SHAKE_BUTTON", "off"}}},
         {"motion_env_empty_is_off", nullptr, {{"PS3_PAD_MOTION", ""}},
          {{"motion", "off"}}, {{"PS3_PAD_MOTION", "0"}}},
+        // frame_pacing: on publishes one frame_rate frame as the present interval;
+        // an interval already in the environment is kept unless the INI names it.
+        {"pacing_default_off", nullptr, {},
+         {{"frame_pacing", "off"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", nullptr}}},
+        {"pacing_ini_on_30", "[settings]\nframe_pacing = on\n", {},
+         {{"frame_pacing", "on"}, {"frame_rate", "30"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "33.333"}}},
+        {"pacing_ini_on_60", "[settings]\nframe_rate = 60\nframe_pacing = yes\n", {},
+         {{"frame_pacing", "on"}, {"frame_rate", "60"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "16.667"}}},
+        {"pacing_ini_on_env_60", "[settings]\nframe_pacing = on\n", {{"PAIN_FRAME_RATE", "60"}},
+         {{"frame_pacing", "on"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "16.667"}}},
+        {"pacing_env_interval_kept", nullptr, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "20.5"}},
+         {{"frame_pacing", "on"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "20.5"}}},
+        {"pacing_env_zero_is_off", nullptr, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "0"}},
+         {{"frame_pacing", "off"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "0"}}},
+        {"pacing_env_invalid_is_off", nullptr, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "soon"}},
+         {{"frame_pacing", "off"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "soon"}}},
+        {"pacing_ini_off_beats_env", "[settings]\nframe_pacing = off\n", {{"PS3RECOMP_PRESENT_INTERVAL_MS", "33.333"}},
+         {{"frame_pacing", "off"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", nullptr}}},
+        {"pacing_ini_on_beats_env", "[settings]\nframe_pacing = on\n", {{"PS3RECOMP_PRESENT_INTERVAL_MS", "50"}},
+         {{"frame_pacing", "on"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "33.333"}}},
+        {"pacing_invalid_ini_uses_env", "[settings]\nframe_pacing = 33\n", {{"PS3RECOMP_PRESENT_INTERVAL_MS", "16.667"}},
+         {{"frame_pacing", "on"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "16.667"}}},
     };
 
     int failed = 0;

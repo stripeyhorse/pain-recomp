@@ -21,7 +21,7 @@ namespace pain_settings {
 namespace {
 using namespace std::literals;
 
-enum class Kind { toggle, presence, inverted_toggle, number, integer, post_scale, cap, frame_rate, language, size, aa, aniso, aspect, upscale, lanes, pad_button };
+enum class Kind { toggle, presence, inverted_toggle, number, integer, post_scale, cap, frame_rate, language, size, aa, aniso, aspect, upscale, lanes, pad_button, pacing };
 
 struct Option {
     std::string_view key;
@@ -68,6 +68,10 @@ constexpr std::array options{
     Option{"frame_rate", "PAIN_FRAME_RATE", "30", Kind::frame_rate},
     Option{"vblank_ms", "PAIN_VBLANK_MS", "16.667", Kind::number, 4, 33},
     Option{"sim_steps", "PAIN_SIM_STEPS", "2", Kind::number, 1, 2},
+    // frame_pacing = on holds each frame on screen for one guest frame
+    // (PS3RECOMP_PRESENT_INTERVAL_MS = 1000 / frame_rate). A value already in
+    // the environment is kept as it is, unless the INI names frame_pacing.
+    Option{"frame_pacing", "PS3RECOMP_PRESENT_INTERVAL_MS", "off", Kind::pacing},
     Option{"thread_qos", "PS3_THREAD_QOS", "on", Kind::toggle},
 #if defined(__APPLE__)
     Option{"spu_mfc_lookup_cache", "SPU_MFC_LOOKUP_CACHE", "off", Kind::toggle},
@@ -121,6 +125,7 @@ bool normalize(const Option& option, std::string& value)
     case Kind::toggle:
     case Kind::presence:
     case Kind::inverted_toggle:
+    case Kind::pacing:
         if (value == "yes" || value == "true" || value == "1") value = "on";
         if (value == "no" || value == "false" || value == "0") value = "off";
         return value == "on" || value == "off";
@@ -204,6 +209,21 @@ bool publish(const char* name, const char* value)
 #endif
 }
 
+// The present interval frame_pacing = on asks for, from the resolved frame_rate.
+const char* pacing_interval(std::string_view frame_rate)
+{
+    return frame_rate == "60" ? "16.667" : "33.333";
+}
+
+// An inherited PS3RECOMP_PRESENT_INTERVAL_MS is an interval, not on/off: it
+// reads as on when the toolkit would pace with it (a number above 0).
+std::string pacing_from_env(const char* env)
+{
+    char* end{};
+    const double ms = std::strtod(env, &end);
+    return end != env && *end == '\0' && ms > 0 && ms <= 1000 ? "on" : "off";
+}
+
 bool apply_option(const Option& option, const std::string& value)
 {
     if (option.key == "fullscreen" && !publish("PS3RECOMP_VK_FULLSCREEN", nullptr)) return false;
@@ -273,7 +293,10 @@ bool load()
         const char* source = "ini";
         if (value.empty()) {
             source = "default";
-            if (const auto* env = inherited(option)) {
+            if (const auto* env = inherited(option); env && option.kind == Kind::pacing) {
+                value = pacing_from_env(env);
+                source = "env";
+            } else if (env) {
                 value = env;
                 if (option.kind == Kind::presence) value = "off";
                 if (option.kind == Kind::inverted_toggle) value = *env && *env != '0' ? "off" : "on";
@@ -299,7 +322,12 @@ bool load()
                 (cores > 0 ? std::to_string(cores) + " performance cores" : "performance cores unknown"s);
             source = resolved_from.c_str();
         }
-        if (!apply_option(option, value)) {
+        bool applied;
+        if (option.kind == Kind::pacing)   // an inherited interval stays as it is
+            applied = source == "env"sv || publish(option.env, value == "on" ? pacing_interval(frame_rate) : nullptr);
+        else
+            applied = apply_option(option, value);
+        if (!applied) {
             std::fprintf(stderr, "[settings] could not publish %s\n", option.env);
             return false;
         }
