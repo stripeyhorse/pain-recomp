@@ -683,11 +683,34 @@ final class Launcher: NSObject, NSApplicationDelegate {
             } else {
                 self.show(.title)
             }
-            NSApp.setActivationPolicy(.regular)
-            self.window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            self.returnToFront()
         }
         if activeProcess === process { followGameLog(log) }
+    }
+
+    /// Back in the Dock and in front once the game has gone. macOS sometimes
+    /// leaves the app listed as a background one after it is made a regular
+    /// app again (2 of 7 returns on 25 November: window in front, no Dock
+    /// icon), so the result is checked and asked for again.
+    private func returnToFront(attempt: Int = 0) {
+        NSApp.setActivationPolicy(.regular)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            // Hidden again: the player has already started another game.
+            guard let self, !self.hiddenForGame else { return }
+            guard NSRunningApplication.current.activationPolicy != .regular else {
+                if attempt > 0 { self.note("Back in the Dock after asking macOS \(attempt + 1) times.") }
+                return
+            }
+            guard attempt < 5 else {
+                self.note("macOS still lists the launcher as a background app after the game closed.")
+                return
+            }
+            // macOS only acts on a change, so go back to background first.
+            NSApp.setActivationPolicy(.accessory)
+            self.returnToFront(attempt: attempt + 1)
+        }
     }
 
     /// Reads the game log as it grows: shader progress, then whether the
