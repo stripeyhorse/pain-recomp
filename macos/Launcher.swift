@@ -131,6 +131,11 @@ final class Launcher: NSObject, NSApplicationDelegate {
     private var activeProcess: Process?
     /// Set while the launcher waits for the game before quitting itself.
     private var quitting = false
+    /// Set while the game's window is open: the launcher is hidden and out of the Dock.
+    private var hiddenForGame = false
+    private var refusedQuit = false
+    /// Set once macOS announces a log out, restart or shut down.
+    private var sessionEnding = false
     private var currentLog: URL?
     private var shaderProgressTimer: Timer?
     private var shaderProgressOffset: UInt64 = 0
@@ -177,6 +182,9 @@ final class Launcher: NSObject, NSApplicationDelegate {
         } catch {
             show(.problem("PAIN couldn't create its log folder. \(error.localizedDescription)"))
         }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.sessionEnding = true }
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -199,8 +207,23 @@ final class Launcher: NSObject, NSApplicationDelegate {
     /// (SIGTERM: REQUEST_EXITGAME, up to 3 s, longer for a save in flight) and
     /// waits up to 6 s off the main thread, so a visible window stays live;
     /// SIGKILL is the last resort.
+    ///
+    /// While the game's window is open the launcher is hidden, with no Dock
+    /// icon and no menu, so the player cannot be the one asking: the request
+    /// comes from another program. Utilities that quit apps left without a
+    /// window send one about a second after the launcher hides, and honouring
+    /// it closed the game as it started. Only macOS ending the session (log
+    /// out, restart, shut down) is honoured then; the game's own window is
+    /// the way to quit.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let process = activeProcess, process.isRunning, !quitting else { return .terminateNow }
+        if hiddenForGame && !sessionEnding && !Self.quitCarriesReason() {
+            if !refusedQuit {
+                refusedQuit = true
+                note("Ignored a quit request from another program while the game is running.")
+            }
+            return .terminateCancel
+        }
         quitting = true
         process.terminate()
         DispatchQueue.global(qos: .userInitiated).async {
@@ -210,6 +233,20 @@ final class Launcher: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { NSApp.reply(toApplicationShouldTerminate: true) }
         }
         return .terminateLater
+    }
+
+    /// Quit events sent because the session is ending carry a reason
+    /// (kAEQuitReason, 'why?'); ones from other programs do not.
+    private static func quitCarriesReason() -> Bool {
+        NSAppleEventManager.shared().currentAppleEvent?
+            .attributeDescriptor(forKeyword: AEKeyword(0x7768_793F)) != nil
+    }
+
+    private func note(_ line: String) {
+        guard let handle = try? FileHandle(forWritingTo: logs.appendingPathComponent("launcher.log")) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: Data((line + "\n").utf8))
     }
 
     private func installMenu() {
@@ -674,6 +711,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
                         self.shaderProgressTimer = nil
                         if line.contains("OK -- window open") {
                             // One Dock icon while the game plays: the game's.
+                            self.hiddenForGame = true
                             self.window.orderOut(nil)
                             NSApp.setActivationPolicy(.accessory)
                         } else {
@@ -711,6 +749,8 @@ final class Launcher: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.activeProcess = nil
+                    self.hiddenForGame = false
+                    self.refusedQuit = false
                     self.shaderProgressTimer?.invalidate()
                     self.shaderProgressTimer = nil
                     self.updateButtons()
