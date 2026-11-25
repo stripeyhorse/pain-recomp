@@ -6,7 +6,7 @@ import Foundation
 // or '#', keys count in [settings] or before any section, and the last valid
 // value wins. Environment variables are not consulted.
 enum Setting: String, CaseIterable {
-    case resScale = "res_scale", frameRate = "frame_rate", vsync, fullscreen, aspect, aa, upscale
+    case resScale = "res_scale", frameRate = "frame_rate", vsync, framePacing = "frame_pacing", fullscreen, aspect, aa, upscale
     case anisotropic, language, audio
     case stickDeadzone = "stick_deadzone", vibration, controllerQuit = "controller_quit"
     case motion, shakeButton = "shake_button"
@@ -17,7 +17,7 @@ enum Setting: String, CaseIterable {
         switch self {
         case .resScale: return "1"
         case .frameRate: return "30"
-        case .vsync, .audio, .controllerQuit, .motion: return "on"
+        case .vsync, .framePacing, .audio, .controllerQuit, .motion: return "on"
         case .fullscreen, .aa, .upscale, .shakeButton: return "off"
         case .aspect: return "fit"
         case .anisotropic: return "0"
@@ -31,7 +31,7 @@ enum Setting: String, CaseIterable {
     func normalize(_ text: String) -> String? {
         var value = SettingsFile.lower(SettingsFile.trim(text))
         switch self {
-        case .vsync, .fullscreen, .audio, .controllerQuit, .motion:
+        case .vsync, .framePacing, .fullscreen, .audio, .controllerQuit, .motion:
             if value == "yes" || value == "true" || value == "1" { value = "on" }
             if value == "no" || value == "false" || value == "0" { value = "off" }
             return value == "on" || value == "off" ? value : nil

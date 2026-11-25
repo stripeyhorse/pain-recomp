@@ -212,7 +212,11 @@ int main()
          {{"motion", "off"}}, {{"PS3_PAD_MOTION", "0"}}},
         // frame_pacing: on publishes one frame_rate frame as the present interval;
         // an interval already in the environment is kept unless the INI names it.
-        {"pacing_default_off", nullptr, {},
+        {"pacing_default_on", nullptr, {},
+         {{"frame_pacing", "on"}, {"frame_rate", "30"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "33.333"}}},
+        {"pacing_default_on_60", "[settings]\nframe_rate = 60\n", {},
+         {{"frame_pacing", "on"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "16.667"}}},
+        {"pacing_ini_off", "[settings]\nframe_pacing = off\n", {},
          {{"frame_pacing", "off"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", nullptr}}},
         {"pacing_ini_on_30", "[settings]\nframe_pacing = on\n", {},
          {{"frame_pacing", "on"}, {"frame_rate", "30"}}, {{"PS3RECOMP_PRESENT_INTERVAL_MS", "33.333"}}},

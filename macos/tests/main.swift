@@ -59,6 +59,10 @@ reads("res_scale bounds", "res_scale = 0.5\n", [.resScale: "0.5"])
 reads("custom anisotropic", "anisotropic = 6\n", [.anisotropic: "6"])
 reads("numeric language", "language = 18\n", [.language: "18"])
 reads("language code is lower-cased", "language = EN-GB\n", [.language: "en-gb"])
+check("frame pacing defaults to on, as the game has it", Setting.framePacing.fallback == "on")
+reads("frame_pacing off", "[settings]\nframe_pacing = off\n", [.framePacing: "off"])
+reads("frame_pacing synonyms", "frame_pacing = No\n", [.framePacing: "off"])
+reads("frame_pacing invalid reads as default", "frame_pacing = 33\n", [:])
 check("controller defaults are the game's", Setting.stickDeadzone.fallback == "10" &&
       Setting.vibration.fallback == "100" && Setting.controllerQuit.fallback == "on")
 reads("controller keys", "[settings]\nstick_deadzone = 0\nvibration = 55\ncontroller_quit = off\n",

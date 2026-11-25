@@ -39,6 +39,7 @@ final class SettingsSheet: NSObject {
     ])
     private let frameRate = Menu(.frameRate, [Choice(title: "30 FPS", value: "30"), Choice(title: "60 FPS", value: "60")])
     private let vsync = Toggle(.vsync, "V-Sync")
+    private let framePacing = Toggle(.framePacing, "Even frame pacing")
     private let fullscreen = Toggle(.fullscreen, "Full screen")
     private let aspect = Menu(.aspect, [Choice(title: "Fit", value: "fit"), Choice(title: "Stretch", value: "stretch")])
     private let antialiasing = Menu(.aa, [
@@ -87,13 +88,14 @@ final class SettingsSheet: NSObject {
     private var menus: [Menu] {
         [resolution, frameRate, aspect, antialiasing, upscale, anisotropic, language, vibration, deadzone, shakeButton]
     }
-    private var toggles: [Toggle] { [vsync, fullscreen, audio, controllerQuit, motion] }
+    private var toggles: [Toggle] { [vsync, framePacing, fullscreen, audio, controllerQuit, motion] }
 
     /// The controller's focus order: the sheet top to bottom, as Tab goes.
     var controllerScreen: ControllerNavigator.Screen {
         ControllerNavigator.Screen(
             window: panel,
-            controls: [resolution.button, frameRate.button, vsync.button, fullscreen.button, aspect.button,
+            controls: [resolution.button, frameRate.button, vsync.button, framePacing.button, fullscreen.button,
+                       aspect.button,
                        antialiasing.button, upscale.button, anisotropic.button, language.button, audio.button,
                        fpsButton, vibration.button, deadzone.button, controllerQuit.button, motion.button,
                        shakeButton.button, revealButton, cancelButton, saveButton],
@@ -154,6 +156,7 @@ final class SettingsSheet: NSObject {
             labelled("Frame rate:", frameRate.button),
             [NSGridCell.emptyContentView, warning],
             [NSGridCell.emptyContentView, vsync.button],
+            [NSGridCell.emptyContentView, framePacing.button],
             [NSGridCell.emptyContentView, fullscreen.button],
             labelled("Picture shape:", aspect.button),
             labelled("Anti-aliasing:", antialiasing.button),

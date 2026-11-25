@@ -320,7 +320,8 @@ check("every pop-up's accessible title is its visible label",
       views(in: panel.contentView!).filter { $0 is NSPopUpButton }.count == labels.count)
 check("defaults shown", popUp(panel, "Resolution:").titleOfSelectedItem == "1280 × 720" &&
       popUp(panel, "Frame rate:").titleOfSelectedItem == "30 FPS" && popUp(panel, "Language:").titleOfSelectedItem == "Automatic" &&
-      button(panel, "V-Sync").state == .on && button(panel, "Sound").state == .on && button(panel, "Full screen").state == .off &&
+      button(panel, "V-Sync").state == .on && button(panel, "Even frame pacing").state == .on &&
+      button(panel, "Sound").state == .on && button(panel, "Full screen").state == .off &&
       popUp(panel, "Vibration:").titleOfSelectedItem == "100%" && popUp(panel, "Stick dead zone:").titleOfSelectedItem == "10%" &&
       button(panel, "Hold PS or Start+Select to quit").state == .on && button(panel, "Motion").state == .on &&
       popUp(panel, "Shake button:").titleOfSelectedItem == "Off" &&
@@ -342,7 +343,7 @@ for _ in 0..<200 {
     view = current.nextKeyView
 }
 print("tab order: " + order.joined(separator: " → "))
-let tabOrder = ["Resolution:", "Frame rate:", "V-Sync", "Full screen", "Picture shape:",
+let tabOrder = ["Resolution:", "Frame rate:", "V-Sync", "Even frame pacing", "Full screen", "Picture shape:",
       "Anti-aliasing:", "Upscaling:", "Texture filtering:", "Language:", "Sound", "Show FPS",
       "Vibration:", "Stick dead zone:", "Hold PS or Start+Select to quit", "Motion", "Shake button:",
       "Show Settings File", "Cancel", "Save"]

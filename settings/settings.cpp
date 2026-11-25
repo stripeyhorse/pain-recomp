@@ -68,10 +68,12 @@ constexpr std::array options{
     Option{"frame_rate", "PAIN_FRAME_RATE", "30", Kind::frame_rate},
     Option{"vblank_ms", "PAIN_VBLANK_MS", "16.667", Kind::number, 4, 33},
     Option{"sim_steps", "PAIN_SIM_STEPS", "2", Kind::number, 1, 2},
-    // frame_pacing = on holds each frame on screen for one guest frame
-    // (PS3RECOMP_PRESENT_INTERVAL_MS = 1000 / frame_rate). A value already in
-    // the environment is kept as it is, unless the INI names frame_pacing.
-    Option{"frame_pacing", "PS3RECOMP_PRESENT_INTERVAL_MS", "off", Kind::pacing},
+    // frame_pacing = on shows each frame at a screen refresh of its own, one
+    // guest frame after the last, and keeps the vblank clock in step with
+    // the screen (PS3RECOMP_PRESENT_INTERVAL_MS = 1000 / frame_rate). A value
+    // already in the environment is kept as it is, unless the INI names
+    // frame_pacing.
+    Option{"frame_pacing", "PS3RECOMP_PRESENT_INTERVAL_MS", "on", Kind::pacing},
     Option{"thread_qos", "PS3_THREAD_QOS", "on", Kind::toggle},
 #if defined(__APPLE__)
     Option{"spu_mfc_lookup_cache", "SPU_MFC_LOOKUP_CACHE", "off", Kind::toggle},

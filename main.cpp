@@ -53,6 +53,8 @@
 #include <thread>
 #include "ps3emu/thread_name.h"   /* ps3_thread_name: every platform; a no-op where there is no API */
 #include "ps3emu/ps3_ftrace.h"    /* PS3_FTRACE: the frame-pacing spans below */
+#include "rsx_frame_lock.h"       /* the vblank clock in step with the screen */
+#include <cmath>
 
 #ifndef _WIN32
 #include "posix_mmap.h"   /* mmap: the guest arena, see alloc_guest_vm */
@@ -155,6 +157,8 @@ extern "C" int  rsx_d3d12_backend_pump_messages(void);
 extern "C" int  rsx_metal_backend_init(uint32_t w, uint32_t h, const char* title);
 extern "C" void rsx_metal_backend_present(void);
 extern "C" int  rsx_metal_backend_pump_messages(void);
+extern "C" int  rsx_metal_backend_refresh_phase(double* since_shown_s, double* refresh_s);
+#  define rsx_backend_refresh_phase rsx_metal_backend_refresh_phase
 #  define rsx_backend_init    rsx_metal_backend_init
 #  define rsx_backend_present rsx_metal_backend_present
 #  define rsx_backend_pump    rsx_metal_backend_pump_messages
@@ -175,6 +179,11 @@ extern "C" int  rsx_null_backend_pump_messages(void);
 #  define rsx_backend_present rsx_null_backend_present
 #  define rsx_backend_pump    rsx_null_backend_pump_messages
 #  define RSX_BACKEND_NAME    "null (headless software)"
+#endif
+/* When the screen last showed a frame and its refresh period, for the vblank
+ * clock. Only the Metal backend reports it; elsewhere the clock runs free. */
+#ifndef rsx_backend_refresh_phase
+static inline int rsx_backend_refresh_phase(double*, double*) { return 0; }
 #endif
 
 /* ---------------------------------------------------------------------------
@@ -466,11 +475,27 @@ static DWORD WINAPI frame_clock(LPVOID)
         });
     }
 
+    /* With frame_pacing on, on a screen whose refresh the vblank divides
+     * evenly, the vblank clock keeps in step with the screen: each deadline is
+     * nudged toward the moments the screen actually refreshed, as reported by
+     * the frames it showed (rsx_frame_lock.h). Two free-running clocks drift,
+     * and the frames then slide across the refresh boundary and back. With
+     * nothing shown lately (hidden window, locked screen) or no such screen,
+     * the clock runs on its own period exactly as before, from where it is.
+     * PAIN_VBLANK_LOCK=0 never locks; =2 also logs the lock every 10 s. */
+    const char* lock_env = getenv("PAIN_VBLANK_LOCK");
+    const int vblank_lock = lock_env && *lock_env ? atoi(lock_env) : 1;
+
     if (vblank_timer) {
-        std::thread([deadline = next_tick, vblank_us, tick_us, pain_stats]() mutable {
+        std::thread([deadline = next_tick, vblank_us, tick_us, pain_stats, vblank_lock]() mutable {
             ps3_thread_name("vblank");
             const unsigned stats_every = (unsigned)(10000000ull / vblank_us);
             unsigned stats_beats = 0;
+            /* The lock as last logged, how long the other state has lasted, and
+             * the distance from the screen's grid since the last line. */
+            int logged = 0;
+            unsigned changed_for = 0, lock_beats = 0, locked_beats = 0;
+            double error_sum = 0, error_max = 0, refresh_ms = 0;
             for (;;) {
                 const ULONGLONG now = tick_us();
                 if ((long long)(now - deadline) < 0) {
@@ -481,7 +506,40 @@ static DWORD WINAPI frame_clock(LPVOID)
                 unsigned beats = 0;
                 while ((long long)(now - deadline) >= 0 && beats < 240) {
                     cellGcmTickVBlank();
-                    deadline += vblank_us;
+                    int locked = 0;
+                    double since_s = 0, refresh_s = 0, error_us = 0;
+                    if (vblank_lock && rsx_backend_refresh_phase(&since_s, &refresh_s)) {
+                        const double next = rsx_frame_lock_next((double)deadline, (double)vblank_us,
+                            (double)tick_us() - since_s * 1e6, refresh_s * 1e6, &locked, &error_us);
+                        deadline = (ULONGLONG)llround(next);
+                    } else {
+                        deadline += vblank_us;
+                    }
+                    if (locked) {
+                        refresh_ms = refresh_s * 1e3;
+                        locked_beats++;
+                        error_sum += std::fabs(error_us);
+                        if (std::fabs(error_us) > error_max) error_max = std::fabs(error_us);
+                    }
+                    /* Say so when the lock is gained or lost, once it has
+                     * lasted half a second (a window dragged across screens,
+                     * or covered for a moment, is not worth a line each way). */
+                    changed_for = locked != logged ? changed_for + 1 : 0;
+                    if (changed_for * vblank_us >= 500000) {
+                        logged = locked;
+                        changed_for = 0;
+                        if (locked)
+                            fprintf(stderr, "[vblank] in step with the screen: %.3f ms vblank, %.3f ms refresh\n",
+                                    vblank_us / 1e3, refresh_ms);
+                        else
+                            fprintf(stderr, "[vblank] on its own timer: no frame shown on a matching screen lately\n");
+                    }
+                    if (vblank_lock >= 2 && ++lock_beats % stats_every == 0) {
+                        fprintf(stderr, "[vblank-lock] locked=%u of %u beats, off the screen's grid by avg %.0f us max %.0f us\n",
+                                locked_beats, stats_every, locked_beats ? error_sum / locked_beats : 0.0, error_max);
+                        locked_beats = 0;
+                        error_sum = error_max = 0;
+                    }
                     beats++;
                     if (pain_stats && ++stats_beats % stats_every == 0) {
                         const unsigned w = (unsigned)pain_wasted, b = (unsigned)pain_burst,
@@ -495,6 +553,50 @@ static DWORD WINAPI frame_clock(LPVOID)
             }
         }).detach();
     }
+
+    /* A hitch explains itself: when the time between two shown frames is more
+     * than two and a half frames (and under two seconds, so not a loading
+     * screen), one line says where this thread spent it -- working through the
+     * guest's commands (shader or texture work lands there), presenting
+     * (waiting for the screen, encoding), or neither, which means the guest
+     * itself was late with the frame. At most one line a second.
+     * PAIN_HITCH_LOG=0 turns it off. */
+    const char* hitch_env = getenv("PAIN_HITCH_LOG");
+    const bool hitch_log = !(hitch_env && *hitch_env == '0');
+    const auto now_ns = [] {
+        return (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    };
+    const uint64_t hitch_ns = (uint64_t)vblank_us * 1000ull * 5;   /* a frame is two vblanks */
+    uint64_t hitch_last_present = 0, hitch_last_line = 0, hitch_drain = 0, hitch_drain_max = 0;
+    unsigned hitch_frames = 0;
+    const auto drain_fifo = [&] {
+        if (!hitch_log) { cellGcm_rsx_process_fifo(); return; }
+        const uint64_t t0 = now_ns();
+        cellGcm_rsx_process_fifo();
+        const uint64_t took = now_ns() - t0;
+        hitch_drain += took;
+        if (took > hitch_drain_max) hitch_drain_max = took;
+    };
+    const auto present_frame = [&] {
+        if (!hitch_log) { present_guest_frame(); return; }
+        const uint64_t t0 = now_ns();
+        present_guest_frame();
+        const uint64_t t1 = now_ns();
+        const uint64_t gap = hitch_last_present ? t1 - hitch_last_present : 0;
+        /* The first second of frames after a start or a load is not judged. */
+        if (gap > 2000000000ull) hitch_frames = 0;
+        else if (++hitch_frames > 30 && gap > hitch_ns && t1 - hitch_last_line > 1000000000ull) {
+            hitch_last_line = t1;
+            const uint64_t spent = hitch_drain + (t1 - t0);
+            fprintf(stderr, "[hitch] %.1f ms between frames (%.1f expected): guest commands %.1f ms (longest step %.1f), "
+                    "presenting %.1f ms, the rest %.1f ms waiting for the guest's frame\n",
+                    gap / 1e6, vblank_us * 2 / 1e3, hitch_drain / 1e6, hitch_drain_max / 1e6,
+                    (t1 - t0) / 1e6, gap > spent ? (gap - spent) / 1e6 : 0.0);
+        }
+        hitch_last_present = t1;
+        hitch_drain = hitch_drain_max = 0;
+    };
 
     for (;;) {
         if (rsx_ok) cellGcm_fifo_kick_wait(fifo_wait_ms);
@@ -511,13 +613,13 @@ static DWORD WINAPI frame_clock(LPVOID)
              * after the drain races the guest's next-frame writes and shows a
              * mixed one. */
             if (rsx_ok && cellGcm_take_flip_pending()) {
-                present_guest_frame();
+                present_frame();
                 last_flip = cellGcm_flip_request_count();
             }
             /* Drain the FIFO every tick. This is what writes the RSX sync-fence
              * labels the game's per-frame logic blocks on, so it has to keep
              * advancing at 60 Hz even while present() throttles. */
-            if (rsx_ok) cellGcm_rsx_process_fifo();
+            if (rsx_ok) drain_fifo();
             next_tick += vblank_us;      /* ~60 Hz by default */
             fired++;
         }
@@ -529,10 +631,10 @@ static DWORD WINAPI frame_clock(LPVOID)
          * The real RSX writes them in microseconds. */
         if (rsx_ok) {
             if (cellGcm_take_flip_pending()) {
-                present_guest_frame();
+                present_frame();
                 last_flip = cellGcm_flip_request_count();
             }
-            cellGcm_rsx_process_fifo();
+            drain_fifo();
 
 #if defined(__APPLE__)
             if (window_closed.load(std::memory_order_acquire)) {
@@ -555,7 +657,7 @@ static DWORD WINAPI frame_clock(LPVOID)
                  * six frames in ten were presented twice, each a second
                  * encode and drawable, and the FPS title counted both. */
                 (void)cellGcm_take_flip_pending();
-                present_guest_frame();
+                present_frame();
                 last_flip = fc;
             } else if (fc == 0) {
                 rsx_backend_present();
